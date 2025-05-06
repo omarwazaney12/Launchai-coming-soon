@@ -24,16 +24,12 @@ const nextConfig = {
         source: '/:path*',
         headers: [
           {
-            key: 'Content-Security-Policy',
-            value: "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self' data:; connect-src 'self' https://*.supabase.co https://wpinaxsmwqcgpgpvehqk.supabase.co https://*.supabase.in;"
+            key: 'X-Content-Type-Options',
+            value: 'nosniff'
           },
           {
             key: 'X-Frame-Options',
             value: 'SAMEORIGIN'
-          },
-          {
-            key: 'X-Content-Type-Options',
-            value: 'nosniff'
           },
           {
             key: 'X-XSS-Protection',
