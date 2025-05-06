@@ -1,8 +1,14 @@
 {
   "version": 2,
-  "cleanUrls": true,
-  "buildCommand": "npm run build",
-  "devCommand": "npm run dev",
+  "builds": [
+    {
+      "src": "package.json",
+      "use": "@vercel/next",
+      "config": {
+        "buildCommand": "next build"
+      }
+    }
+  ],
   "rewrites": [
     { "source": "/test-supabase", "destination": "/" }
   ]
