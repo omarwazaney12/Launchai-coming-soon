@@ -3,7 +3,12 @@
   "cleanUrls": true,
   "buildCommand": "npm run build",
   "devCommand": "npm run dev",
-  "ignoreCommand": "git diff --quiet HEAD^ HEAD -- !pages/test-supabase.js",
+  "git": {
+    "deploymentEnabled": {
+      "main": true
+    }
+  },
+  "forceDeployTimestamp": "2023-07-10T12:00:00Z",
   "rewrites": [
     { "source": "/test-supabase", "destination": "/" }
   ],
