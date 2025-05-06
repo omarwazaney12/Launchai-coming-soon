@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import Head from 'next/head';
-import { FaInstagram } from 'react-icons/fa';
+import { FaInstagram } from 'react-icons/fa/index.js';
 import Background from '../components/Background';
 import Navbar from '../components/Navbar';
 import EarlyAccessForm from '../components/EarlyAccessForm';

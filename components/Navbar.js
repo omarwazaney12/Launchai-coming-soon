@@ -1,4 +1,4 @@
-import { FaInstagram } from 'react-icons/fa';
+import { FaInstagram } from 'react-icons/fa/index.js';
 
 export default function Navbar() {
   return (

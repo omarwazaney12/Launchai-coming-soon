@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '../utils/supabase';
-import { FaFileUpload } from 'react-icons/fa';
+import { FaFileUpload } from 'react-icons/fa/index.js';
 
 export default function JobApplicationForm({ position, onClose, onNotification }) {
   const [currentStep, setCurrentStep] = useState(1);
