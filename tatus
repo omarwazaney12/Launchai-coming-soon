@@ -1,0 +1,70 @@
+[33mcommit 1e21deb649f26ec502420216057f5e411195930b[m[33m ([m[1;36mHEAD[m[33m -> [m[1;32mmain[m[33m, [m[1;31morigin/main[m[33m)[m
+Author: Omarw <omarwazani10@gmail.com>
+Date:   Tue May 6 20:56:36 2025 +0300
+
+    Remove test-supabase page causing build error
+
+ pages/test-supabase.js | 1 [31m-[m
+ 1 file changed, 1 deletion(-)
+
+[33mcommit 25140158a75915bebf89049382d3f84e63c79f2f[m
+Author: Omarw <omarwazani10@gmail.com>
+Date:   Tue May 6 20:43:33 2025 +0300
+
+    Initial commit: LaunchAI Coming Soon Page
+
+ .env.local.example                      |    4 [32m+[m
+ .gitignore                              |   37 [32m+[m
+ README.md                               |  133 [32m+[m
+ components/Background.js                |   12 [32m+[m
+ components/EarlyAccessForm.js           |   85 [32m+[m
+ components/JobApplicationButton.js      |   10 [32m+[m
+ components/JobApplicationForm.js        |  664 [32m++++[m
+ components/Navbar.js                    |   24 [32m+[m
+ components/Notification.js              |   21 [32m+[m
+ direct-permissions.sql                  |   21 [32m+[m
+ generate-favicon.js                     |   55 [32m+[m
+ next.config.js                          |   39 [32m+[m
+ package-lock.json                       | 6610 [32m+++++++++++++++++++++++++++++++[m
+ package.json                            |   26 [32m+[m
+ pages/_app.js                           |    7 [32m+[m
+ pages/api/setup-permissions.js          |   44 [32m+[m
+ pages/index.js                          |  215 [32m+[m
+ pages/test-supabase.js                  |    1 [32m+[m
+ postcss.config.js                       |    6 [32m+[m
+ public/android-chrome-144x144.png       |  Bin [31m0[m -> [32m1879[m bytes
+ public/android-chrome-192x192.png       |  Bin [31m0[m -> [32m2562[m bytes
+ public/android-chrome-256x256.png       |  Bin [31m0[m -> [32m3777[m bytes
+ public/android-chrome-36x36.png         |  Bin [31m0[m -> [32m490[m bytes
+ public/android-chrome-384x384.png       |  Bin [31m0[m -> [32m5820[m bytes
+ public/android-chrome-48x48.png         |  Bin [31m0[m -> [32m610[m bytes
+ public/android-chrome-512x512.png       |  Bin [31m0[m -> [32m8779[m bytes
+ public/android-chrome-72x72.png         |  Bin [31m0[m -> [32m886[m bytes
+ public/android-chrome-96x96.png         |  Bin [31m0[m -> [32m1147[m bytes
+ public/apple-touch-icon-1024x1024.png   |  Bin [31m0[m -> [32m22806[m bytes
+ public/apple-touch-icon-114x114.png     |  Bin [31m0[m -> [32m1499[m bytes
+ public/apple-touch-icon-120x120.png     |  Bin [31m0[m -> [32m1572[m bytes
+ public/apple-touch-icon-144x144.png     |  Bin [31m0[m -> [32m1994[m bytes
+ public/apple-touch-icon-152x152.png     |  Bin [31m0[m -> [32m2077[m bytes
+ public/apple-touch-icon-167x167.png     |  Bin [31m0[m -> [32m2300[m bytes
+ public/apple-touch-icon-180x180.png     |  Bin [31m0[m -> [32m2607[m bytes
+ public/apple-touch-icon-57x57.png       |  Bin [31m0[m -> [32m780[m bytes
+ public/apple-touch-icon-60x60.png       |  Bin [31m0[m -> [32m818[m bytes
+ public/apple-touch-icon-72x72.png       |  Bin [31m0[m -> [32m931[m bytes
+ public/apple-touch-icon-76x76.png       |  Bin [31m0[m -> [32m984[m bytes
+ public/apple-touch-icon-precomposed.png |  Bin [31m0[m -> [32m2607[m bytes
+ public/apple-touch-icon.png             |  Bin [31m0[m -> [32m2607[m bytes
+ public/favicon-16x16.png                |  Bin [31m0[m -> [32m281[m bytes
+ public/favicon-32x32.png                |  Bin [31m0[m -> [32m468[m bytes
+ public/favicon-48x48.png                |  Bin [31m0[m -> [32m610[m bytes
+ public/favicon-source.svg               |    5 [32m+[m
+ public/favicon.ico                      |  Bin [31m0[m -> [32m33310[m bytes
+ public/manifest.webmanifest             |   68 [32m+[m
+ reference-html-structure.html           |  114 [32m+[m
+ setup-permissions.sql                   |   31 [32m+[m
+ styles/globals.css                      |  114 [32m+[m
+ supabase_schema.sql                     |   92 [32m+[m
+ tailwind.config.js                      |   28 [32m+[m
+ upload-to-github.md                     |   51 [32m+[m
+ utils/supabase.js                       |   11 [32m+[m
+ 54 files changed, 8528 insertions(+)

@@ -1,8 +1,21 @@
 /** @type {import('next').NextConfig} */
+// Force Vercel to rebuild without cache
 const nextConfig = {
   reactStrictMode: true,
+  swcMinify: true,
+  // Explicitly exclude the test-supabase page from builds
+  pageExtensions: ['js', 'jsx', 'ts', 'tsx'],
   images: {
     domains: ['localhost'],
+  },
+  async redirects() {
+    return [
+      {
+        source: '/test-supabase',
+        destination: '/',
+        permanent: true,
+      },
+    ]
   },
   async headers() {
     return [
