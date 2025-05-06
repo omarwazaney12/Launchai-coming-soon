@@ -68,7 +68,7 @@ export default function EarlyAccessForm({ onNotification }) {
             value={email}
             onChange={(e) => setEmail(e.target.value)}
             placeholder="Enter your email for early access"
-            className="flex-1 px-6 py-4 bg-primary-800/50 border border-primary-700/30 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:border-primary-500 focus:ring-1 focus:ring-primary-500/50"
+            className="flex-1 px-6 py-4 bg-primary-800/50 border border-primary-700/30 rounded-lg text-white placeholder-gray-400 text-sm focus:outline-none focus:border-primary-500 focus:ring-1 focus:ring-primary-500/50"
             disabled={isSubmitting}
           />
           <button
