@@ -1,5 +1,5 @@
 /** @type {import('next').NextConfig} */
-// Force Vercel to rebuild without cache
+// Force Vercel to rebuild without cache - Updated on latest commit
 const nextConfig = {
   reactStrictMode: true,
   swcMinify: true,
