@@ -3,22 +3,7 @@
   "cleanUrls": true,
   "buildCommand": "npm run build",
   "devCommand": "npm run dev",
-  "git": {
-    "deploymentEnabled": {
-      "main": true
-    }
-  },
   "rewrites": [
     { "source": "/test-supabase", "destination": "/" }
-  ],
-  "headers": [
-    {
-      "source": "/(.*)",
-      "headers": [
-        { "key": "X-Content-Type-Options", "value": "nosniff" },
-        { "key": "X-Frame-Options", "value": "DENY" },
-        { "key": "X-XSS-Protection", "value": "1; mode=block" }
-      ]
-    }
   ]
 } 

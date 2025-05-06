@@ -1,18 +1,3 @@
-# Ignore test-supabase
-pages/test-supabase.js
-pages/test-supabase/
-test-supabase/
-test-supabase.js
-
-# Node modules
+.git
 node_modules
-
-# Build directories
-.next
-out
-
-# Environment files
-.env.local
-.env.development.local
-.env.test.local
-.env.production.local 
+README.md 
