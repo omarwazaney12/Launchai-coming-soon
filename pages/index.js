@@ -7,11 +7,13 @@ import EarlyAccessForm from '../components/EarlyAccessForm';
 import JobApplicationButton from '../components/JobApplicationButton';
 import JobApplicationForm from '../components/JobApplicationForm';
 import Notification from '../components/Notification';
+import SurveyForm from '../components/SurveyForm';
 
 export default function Home() {
   const [activeTab, setActiveTab] = useState('early-access');
   const [applicationFormVisible, setApplicationFormVisible] = useState(false);
   const [selectedPosition, setSelectedPosition] = useState('');
+  const [surveyFormVisible, setSurveyFormVisible] = useState(false);
   const [notification, setNotification] = useState({
     message: '',
     type: 'success',
@@ -40,6 +42,14 @@ export default function Home() {
 
   const closeApplicationForm = () => {
     setApplicationFormVisible(false);
+  };
+
+  const openSurveyForm = () => {
+    setSurveyFormVisible(true);
+  };
+
+  const closeSurveyForm = () => {
+    setSurveyFormVisible(false);
   };
 
   return (
@@ -107,7 +117,14 @@ export default function Home() {
                 <p className="text-gray-300 text-center mb-6">
                   Get early access to our AI-powered platform and give your startup the competitive edge.
                 </p>
-                <EarlyAccessForm onNotification={handleShowNotification} />
+                <div className="w-full max-w-md mx-auto">
+                  <button
+                    onClick={openSurveyForm}
+                    className="w-full btn-hover-effect px-6 py-4 bg-gradient-to-r from-primary-600 to-primary-800 rounded-lg font-semibold text-white shadow-lg hover:scale-105 active:scale-95 transition-transform"
+                  >
+                    <span>Sign Up For Free Trial</span>
+                  </button>
+                </div>
               </div>
             </div>
 
@@ -207,6 +224,14 @@ export default function Home() {
         <JobApplicationForm
           position={selectedPosition}
           onClose={closeApplicationForm}
+          onNotification={handleShowNotification}
+        />
+      )}
+
+      {/* Survey Form Modal */}
+      {surveyFormVisible && (
+        <SurveyForm
+          onClose={closeSurveyForm}
           onNotification={handleShowNotification}
         />
       )}
