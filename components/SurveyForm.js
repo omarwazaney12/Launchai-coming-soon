@@ -1,11 +1,109 @@
-import { useState } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { supabase } from '../utils/supabase';
 
 export default function SurveyForm({ onClose, onNotification }) {
   const [currentSection, setCurrentSection] = useState(0);
   const [formData, setFormData] = useState({});
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [touchedInputs, setTouchedInputs] = useState({});
+  const [isScrolling, setIsScrolling] = useState(false);
   
+  // Add debounce for mobile inputs
+  const debounce = (func, wait) => {
+    let timeout;
+    return (...args) => {
+      clearTimeout(timeout);
+      timeout = setTimeout(() => func(...args), wait);
+    };
+  };
+  
+  // Optimize rendering for mobile
+  useEffect(() => {
+    // Add passive listeners to improve touch responsiveness
+    const options = { passive: true };
+    const container = document.querySelector('.survey-container');
+    if (container) {
+      container.addEventListener('touchstart', handleTouchStart, options);
+      container.addEventListener('touchmove', handleTouchMove, options);
+      container.addEventListener('touchend', handleTouchEnd, options);
+    }
+    
+    return () => {
+      if (container) {
+        container.removeEventListener('touchstart', handleTouchStart);
+        container.removeEventListener('touchmove', handleTouchMove);
+        container.removeEventListener('touchend', handleTouchEnd);
+      }
+    };
+  }, []);
+  
+  const handleTouchStart = () => {
+    // Don't process multiple events simultaneously to improve performance
+  };
+  
+  const handleTouchMove = () => {
+    setIsScrolling(true);
+  };
+  
+  const handleTouchEnd = () => {
+    setTimeout(() => {
+      setIsScrolling(false);
+    }, 50);
+  };
+  
+  // Add touch feedback
+  const handleTouchFeedback = (key) => {
+    setTouchedInputs(prev => ({ ...prev, [key]: true }));
+    setTimeout(() => {
+      setTouchedInputs(prev => ({ ...prev, [key]: false }));
+    }, 300);
+  };
+  
+  // Replace synchronous handler with debounced version for text inputs
+  const handleInputChange = useCallback(
+    debounce((sectionIndex, questionIndex, value, isCheckbox = false) => {
+      const newFormData = { ...formData };
+      const section = surveyData.sections[sectionIndex];
+      const question = section.questions[questionIndex];
+      const key = `${section.title}-${question.label}`;
+      
+      if (isCheckbox) {
+        if (!newFormData[key]) {
+          newFormData[key] = [value];
+        } else if (newFormData[key].includes(value)) {
+          newFormData[key] = newFormData[key].filter(item => item !== value);
+        } else {
+          // If there's a limit, check if we're at the limit
+          if (question.limit && newFormData[key].length >= question.limit) {
+            return; // Don't add more if we're at the limit
+          }
+          newFormData[key] = [...newFormData[key], value];
+        }
+      } else {
+        newFormData[key] = value;
+      }
+      
+      setFormData(newFormData);
+    }, 100),
+    [formData]
+  );
+  
+  // Use this for immediate feedback on checkboxes/radios
+  const handleImmediateChange = (sectionIndex, questionIndex, value, isCheckbox = false) => {
+    const section = surveyData.sections[sectionIndex];
+    const question = section.questions[questionIndex];
+    const key = `${section.title}-${question.label}`;
+    
+    // Give touch feedback
+    handleTouchFeedback(key + value);
+    
+    // Skip if scrolling to avoid accidental selections
+    if (isScrolling) return;
+    
+    // Then call the debounced handler
+    handleInputChange(sectionIndex, questionIndex, value, isCheckbox);
+  };
+
   const surveyData = {
     "title": "LaunchAI Early Access Survey",
     "sections": [
@@ -205,31 +303,6 @@ export default function SurveyForm({ onClose, onNotification }) {
     ]
   };
 
-  const handleInputChange = (sectionIndex, questionIndex, value, isCheckbox = false) => {
-    const newFormData = { ...formData };
-    const section = surveyData.sections[sectionIndex];
-    const question = section.questions[questionIndex];
-    const key = `${section.title}-${question.label}`;
-    
-    if (isCheckbox) {
-      if (!newFormData[key]) {
-        newFormData[key] = [value];
-      } else if (newFormData[key].includes(value)) {
-        newFormData[key] = newFormData[key].filter(item => item !== value);
-      } else {
-        // If there's a limit, check if we're at the limit
-        if (question.limit && newFormData[key].length >= question.limit) {
-          return; // Don't add more if we're at the limit
-        }
-        newFormData[key] = [...newFormData[key], value];
-      }
-    } else {
-      newFormData[key] = value;
-    }
-    
-    setFormData(newFormData);
-  };
-
   const handleSubmit = async () => {
     setIsSubmitting(true);
     
@@ -302,23 +375,33 @@ export default function SurveyForm({ onClose, onNotification }) {
       case 'checkbox':
         return (
           <div className="space-y-2">
-            {question.options.map((option, optionIndex) => (
-              <div key={optionIndex} className="flex items-center">
-                <input
-                  type="checkbox"
-                  id={`${key}-${optionIndex}`}
-                  className="w-4 h-4 text-primary-600 border-gray-600 rounded focus:ring-primary-500 bg-gray-800"
-                  checked={formData[key]?.includes(option) || false}
-                  onChange={() => handleInputChange(sectionIndex, questionIndex, option, true)}
-                />
-                <label 
-                  htmlFor={`${key}-${optionIndex}`} 
-                  className="ml-2 text-sm text-gray-300"
+            {question.options.map((option, optionIndex) => {
+              const optionKey = `${key}-${optionIndex}`;
+              const isSelected = formData[key]?.includes(option) || false;
+              const isTouched = touchedInputs[key + option] || false;
+              
+              return (
+                <div 
+                  key={optionIndex} 
+                  className={`flex items-center ${isTouched ? 'bg-primary-900/60' : ''} transition-colors rounded p-2 mb-1 active:bg-primary-800/40`}
                 >
-                  {option}
-                </label>
-              </div>
-            ))}
+                  <input
+                    type="checkbox"
+                    id={optionKey}
+                    className="w-5 h-5 text-primary-600 border-gray-600 rounded focus:ring-primary-500 bg-gray-800"
+                    checked={isSelected}
+                    onChange={() => handleImmediateChange(sectionIndex, questionIndex, option, true)}
+                  />
+                  <label 
+                    htmlFor={optionKey} 
+                    className="ml-3 text-sm text-gray-300 flex-1 py-1"
+                    onClick={() => handleImmediateChange(sectionIndex, questionIndex, option, true)}
+                  >
+                    {option}
+                  </label>
+                </div>
+              );
+            })}
             {question.limit && (
               <p className="text-xs text-gray-500 mt-1">
                 Please select up to {question.limit} options
@@ -331,24 +414,34 @@ export default function SurveyForm({ onClose, onNotification }) {
       case 'radio':
         return (
           <div className="space-y-2">
-            {question.options.map((option, optionIndex) => (
-              <div key={optionIndex} className="flex items-center">
-                <input
-                  type="radio"
-                  id={`${key}-${optionIndex}`}
-                  name={key}
-                  className="w-4 h-4 text-primary-600 border-gray-600 focus:ring-primary-500 bg-gray-800"
-                  checked={formData[key] === option}
-                  onChange={() => handleInputChange(sectionIndex, questionIndex, option)}
-                />
-                <label 
-                  htmlFor={`${key}-${optionIndex}`} 
-                  className="ml-2 text-sm text-gray-300"
+            {question.options.map((option, optionIndex) => {
+              const optionKey = `${key}-${optionIndex}`;
+              const isSelected = formData[key] === option;
+              const isTouched = touchedInputs[key + option] || false;
+              
+              return (
+                <div 
+                  key={optionIndex} 
+                  className={`flex items-center ${isTouched ? 'bg-primary-900/60' : ''} transition-colors rounded p-2 mb-1 active:bg-primary-800/40`}
                 >
-                  {option}
-                </label>
-              </div>
-            ))}
+                  <input
+                    type="radio"
+                    id={optionKey}
+                    name={key}
+                    className="w-5 h-5 text-primary-600 border-gray-600 focus:ring-primary-500 bg-gray-800"
+                    checked={isSelected}
+                    onChange={() => handleImmediateChange(sectionIndex, questionIndex, option)}
+                  />
+                  <label 
+                    htmlFor={optionKey} 
+                    className="ml-3 text-sm text-gray-300 flex-1 py-1"
+                    onClick={() => handleImmediateChange(sectionIndex, questionIndex, option)}
+                  >
+                    {option}
+                  </label>
+                </div>
+              );
+            })}
           </div>
         );
       
@@ -380,14 +473,14 @@ export default function SurveyForm({ onClose, onNotification }) {
   };
 
   return (
-    <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex justify-center items-center p-4 overflow-y-auto">
-      <div className="bg-primary-900 border border-primary-800/60 rounded-xl w-full max-w-3xl max-h-[90vh] overflow-y-auto">
+    <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex justify-center items-start p-4 overflow-y-auto">
+      <div className="bg-primary-900 border border-primary-800/60 rounded-xl w-full max-w-3xl max-h-[90vh] overflow-y-auto survey-container">
         <div className="p-6 sm:p-8">
           <div className="flex justify-between items-center mb-6">
             <h2 className="text-2xl font-bold text-white">{surveyData.title}</h2>
             <button 
               onClick={onClose}
-              className="text-gray-400 hover:text-white"
+              className="text-gray-400 hover:text-white active:bg-primary-800/40 p-2 rounded-full transition-colors"
               aria-label="Close"
             >
               <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -430,7 +523,7 @@ export default function SurveyForm({ onClose, onNotification }) {
             <button 
               onClick={prevSection} 
               disabled={currentSection === 0}
-              className={`px-4 py-2 rounded ${currentSection === 0 ? 'text-gray-600 cursor-not-allowed' : 'text-gray-300 hover:text-white'}`}
+              className={`px-4 py-3 rounded ${currentSection === 0 ? 'text-gray-600 cursor-not-allowed' : 'text-gray-300 hover:text-white active:bg-primary-800/40'}`}
             >
               Previous
             </button>
@@ -440,16 +533,16 @@ export default function SurveyForm({ onClose, onNotification }) {
                 <button 
                   onClick={handleSubmit} 
                   disabled={isSubmitting || !isFinalSectionComplete()}
-                  className={`px-6 py-2 rounded-lg ${isSubmitting || !isFinalSectionComplete() ? 
+                  className={`px-6 py-3 rounded-lg ${isSubmitting || !isFinalSectionComplete() ? 
                     'bg-gray-700 text-gray-400 cursor-not-allowed' : 
-                    'bg-gradient-to-r from-primary-600 to-primary-800 text-white hover:from-primary-500 hover:to-primary-700'}`}
+                    'bg-gradient-to-r from-primary-600 to-primary-800 text-white hover:from-primary-500 hover:to-primary-700 active:scale-95 transform transition-transform'}`}
                 >
                   {isSubmitting ? 'Submitting...' : 'Submit Survey'}
                 </button>
               ) : (
                 <button 
                   onClick={nextSection}
-                  className="px-6 py-2 bg-gradient-to-r from-primary-600 to-primary-800 rounded-lg text-white hover:from-primary-500 hover:to-primary-700"
+                  className="px-6 py-3 bg-gradient-to-r from-primary-600 to-primary-800 rounded-lg text-white hover:from-primary-500 hover:to-primary-700 active:scale-95 transform transition-transform"
                 >
                   Next Section
                 </button>
