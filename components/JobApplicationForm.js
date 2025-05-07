@@ -1,10 +1,13 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '../utils/supabase';
 import { FaFileUpload } from 'react-icons/fa/index.js';
 
 export default function JobApplicationForm({ position, onClose, onNotification }) {
   const [currentStep, setCurrentStep] = useState(1);
   const totalSteps = 4;
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [touchedInputs, setTouchedInputs] = useState({});
+  const [isScrolling, setIsScrolling] = useState(false);
   
   // Form state
   const [formData, setFormData] = useState({
@@ -32,30 +35,112 @@ export default function JobApplicationForm({ position, onClose, onNotification }
   // Error state
   const [errors, setErrors] = useState({});
   
-  // Handle input change
+  // Add debounce for mobile inputs
+  const debounce = (func, wait) => {
+    let timeout;
+    return (...args) => {
+      clearTimeout(timeout);
+      timeout = setTimeout(() => func(...args), wait);
+    };
+  };
+  
+  // Optimize rendering for mobile
+  useEffect(() => {
+    // Add passive listeners to improve touch responsiveness
+    const options = { passive: true };
+    const container = document.querySelector('.application-form-container');
+    if (container) {
+      container.addEventListener('touchstart', handleTouchStart, options);
+      container.addEventListener('touchmove', handleTouchMove, options);
+      container.addEventListener('touchend', handleTouchEnd, options);
+    }
+    
+    return () => {
+      if (container) {
+        container.removeEventListener('touchstart', handleTouchStart);
+        container.removeEventListener('touchmove', handleTouchMove);
+        container.removeEventListener('touchend', handleTouchEnd);
+      }
+    };
+  }, []);
+  
+  const handleTouchStart = () => {
+    // Don't process multiple events simultaneously to improve performance
+  };
+  
+  const handleTouchMove = () => {
+    setIsScrolling(true);
+  };
+  
+  const handleTouchEnd = () => {
+    setTimeout(() => {
+      setIsScrolling(false);
+    }, 50);
+  };
+  
+  // Add touch feedback
+  const handleTouchFeedback = (name) => {
+    setTouchedInputs(prev => ({ ...prev, [name]: true }));
+    setTimeout(() => {
+      setTouchedInputs(prev => ({ ...prev, [name]: false }));
+    }, 300);
+  };
+  
+  // Handle input change with debouncing for text inputs
+  const handleDebouncedChange = useCallback(
+    debounce((name, value, type, checked) => {
+      if (type === 'checkbox' && name === 'terms') {
+        setFormData(prev => ({ ...prev, terms: checked }));
+      } else if (type === 'checkbox' && name.startsWith('skill-')) {
+        const skill = name.replace('skill-', '');
+        setFormData(prev => {
+          const newSkills = checked 
+            ? [...prev.skills, skill] 
+            : prev.skills.filter(s => s !== skill);
+          return { ...prev, skills: newSkills };
+        });
+      } else if (type === 'file') {
+        // File handling is handled separately
+      } else {
+        setFormData(prev => ({ ...prev, [name]: value }));
+      }
+    }, 100),
+    []
+  );
+  
+  // Handle immediate UI feedback then debounce the state update
   const handleChange = (e) => {
     const { name, value, type, checked } = e.target;
     
-    if (type === 'checkbox' && name === 'terms') {
-      setFormData({ ...formData, terms: checked });
-    } else if (type === 'checkbox' && name.startsWith('skill-')) {
-      const skill = name.replace('skill-', '');
-      const newSkills = checked 
-        ? [...formData.skills, skill] 
-        : formData.skills.filter(s => s !== skill);
-      
-      setFormData({ ...formData, skills: newSkills });
-    } else if (type === 'file') {
+    // Give touch feedback for mobile
+    handleTouchFeedback(name);
+    
+    // Skip if scrolling to avoid accidental selections
+    if (isScrolling && (type === 'checkbox' || type === 'radio')) return;
+    
+    // Handle file uploads immediately (don't debounce)
+    if (type === 'file') {
       if (e.target.files.length > 0) {
-        setFormData({ 
-          ...formData, 
+        setFormData(prev => ({ 
+          ...prev, 
           resume: e.target.files[0],
           resumeName: e.target.files[0].name
-        });
+        }));
       }
-    } else {
-      setFormData({ ...formData, [name]: value });
+      return;
     }
+    
+    // For text inputs, provide immediate visual update
+    if (type === 'text' || type === 'email' || type === 'tel' || type === 'textarea') {
+      // Visual immediate update for better user experience
+      const formElements = document.querySelectorAll(`[name="${name}"]`);
+      if (formElements && formElements.length > 0) {
+        formElements[0].value = value;
+      }
+    }
+    
+    // Debounce the actual state update
+    handleDebouncedChange(name, value, type, checked);
   };
   
   // Validate current step
@@ -158,12 +243,22 @@ export default function JobApplicationForm({ position, onClose, onNotification }
   const nextStep = () => {
     if (validateStep(currentStep)) {
       setCurrentStep(prev => Math.min(prev + 1, totalSteps));
+      // Scroll to top when changing steps
+      setTimeout(() => {
+        const container = document.querySelector('.application-form-container');
+        if (container) container.scrollTop = 0;
+      }, 10);
     }
   };
   
   // Handle previous step
   const prevStep = () => {
     setCurrentStep(prev => Math.max(prev - 1, 1));
+    // Scroll to top when changing steps
+    setTimeout(() => {
+      const container = document.querySelector('.application-form-container');
+      if (container) container.scrollTop = 0;
+    }, 10);
   };
   
   // Handle form submission
@@ -173,6 +268,8 @@ export default function JobApplicationForm({ position, onClose, onNotification }
     if (!validateStep(currentStep)) {
       return;
     }
+    
+    setIsSubmitting(true);
     
     try {
       // First, upload the resume to Supabase Storage
@@ -228,20 +325,160 @@ export default function JobApplicationForm({ position, onClose, onNotification }
     } catch (error) {
       console.error('Application submission error:', error);
       onNotification('Failed to submit application. Please try again.', 'error');
+    } finally {
+      setIsSubmitting(false);
     }
   };
   
+  // Input component with optimized rendering for mobile
+  const FormInput = ({ label, name, type = 'text', value, placeholder = '', required = false, options = [], onChange }) => {
+    const isTouched = touchedInputs[name] || false;
+    const error = errors[name];
+    
+    return (
+      <div className="mb-4">
+        <label 
+          htmlFor={name} 
+          className="block text-sm font-medium text-gray-300 mb-1"
+        >
+          {label} {required && <span className="text-red-500">*</span>}
+        </label>
+        
+        {type === 'select' ? (
+          <select
+            id={name}
+            name={name}
+            value={value}
+            onChange={onChange}
+            className={`w-full p-3 bg-primary-800/70 border ${error ? 'border-red-500' : 'border-primary-700/50'} rounded-lg text-white focus:outline-none focus:border-primary-500 ${isTouched ? 'bg-primary-800' : ''}`}
+          >
+            <option value="">Select an option</option>
+            {options.map(option => (
+              <option key={option.value} value={option.value}>
+                {option.label}
+              </option>
+            ))}
+          </select>
+        ) : type === 'textarea' ? (
+          <textarea
+            id={name}
+            name={name}
+            value={value}
+            placeholder={placeholder}
+            onChange={onChange}
+            rows="4"
+            className={`w-full p-3 bg-primary-800/70 border ${error ? 'border-red-500' : 'border-primary-700/50'} rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-primary-500 ${isTouched ? 'bg-primary-800' : ''}`}
+          />
+        ) : type === 'file' ? (
+          <div className={`w-full p-2 border ${error ? 'border-red-500' : 'border-primary-700/50'} border-dashed rounded-lg bg-primary-800/50 ${isTouched ? 'bg-primary-800' : ''}`}>
+            <label 
+              htmlFor={name}
+              className="flex flex-col items-center justify-center py-3 cursor-pointer"
+            >
+              <FaFileUpload className="text-3xl text-primary-500 mb-2" />
+              <span className="text-sm font-medium text-gray-300">
+                {value ? value : 'Select your resume'}
+              </span>
+              <input
+                type="file"
+                id={name}
+                name={name}
+                accept=".pdf,.doc,.docx"
+                onChange={onChange}
+                className="hidden"
+              />
+            </label>
+          </div>
+        ) : type === 'checkbox' ? (
+          <div className={`flex items-center ${isTouched ? 'bg-primary-800/60' : ''} p-2 rounded transition-colors`}>
+            <input
+              type="checkbox"
+              id={name}
+              name={name}
+              checked={value}
+              onChange={onChange}
+              className="w-5 h-5 text-primary-600 border-gray-700 rounded bg-primary-900 focus:ring-primary-500"
+            />
+            <label 
+              htmlFor={name} 
+              className="ml-3 block text-sm text-gray-300"
+            >
+              I agree to the terms and conditions
+            </label>
+          </div>
+        ) : (
+          <input
+            type={type}
+            id={name}
+            name={name}
+            value={value}
+            placeholder={placeholder}
+            onChange={onChange}
+            className={`w-full p-3 bg-primary-800/70 border ${error ? 'border-red-500' : 'border-primary-700/50'} rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-primary-500 ${isTouched ? 'bg-primary-800' : ''}`}
+          />
+        )}
+        
+        {error && (
+          <p className="text-sm text-red-500 mt-1">{error}</p>
+        )}
+      </div>
+    );
+  };
+  
+  // Optimize rendering of skills checkboxes
+  const SkillCheckbox = ({ skill, isSelected, onChange }) => {
+    const name = `skill-${skill}`;
+    const isTouched = touchedInputs[name] || false;
+    
+    return (
+      <div 
+        className={`flex items-center ${isTouched ? 'bg-primary-800/60' : ''} p-2 rounded mb-1 transition-colors active:bg-primary-800/80`}
+      >
+        <input
+          type="checkbox"
+          id={name}
+          name={name}
+          checked={isSelected}
+          onChange={onChange}
+          className="w-5 h-5 text-primary-600 border-gray-700 rounded bg-primary-900 focus:ring-primary-500"
+        />
+        <label 
+          htmlFor={name} 
+          className="ml-3 block text-sm text-gray-300 flex-1 py-1"
+          onClick={(e) => {
+            // Prevent propagation so parent elements don't get clicked
+            e.stopPropagation();
+            // Create a synthetic event to trigger onChange
+            const syntheticEvent = {
+              target: {
+                name,
+                type: 'checkbox',
+                checked: !isSelected
+              }
+            };
+            onChange(syntheticEvent);
+          }}
+        >
+          {skill}
+        </label>
+      </div>
+    );
+  };
+  
   return (
-    <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-      <div className="bg-primary-900/80 border border-primary-800/50 rounded-xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
+    <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-start justify-center z-50 p-4 overflow-y-auto">
+      <div className="bg-primary-900/80 border border-primary-800/50 rounded-xl w-full max-w-2xl max-h-[90vh] overflow-y-auto application-form-container">
         <div className="p-6">
           <div className="flex justify-between items-center mb-6">
             <h2 className="text-xl font-bold">Apply for {position} Position</h2>
             <button 
               onClick={onClose}
-              className="text-gray-400 hover:text-white"
+              className="text-gray-400 hover:text-white active:bg-primary-800/40 p-2 rounded-full transition-colors"
+              aria-label="Close"
             >
-              ×
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
             </button>
           </div>
           
@@ -249,380 +486,327 @@ export default function JobApplicationForm({ position, onClose, onNotification }
           <div className="flex justify-center mb-8">
             {Array.from({ length: totalSteps }).map((_, index) => (
               <div 
-                key={index} 
-                className={`w-3 h-3 rounded-full mx-2 transition-all ${
+                key={index}
+                className={`w-3 h-3 rounded-full mx-1 ${
                   currentStep > index + 1 
-                    ? 'bg-primary-400' 
-                    : currentStep === index + 1 
-                      ? 'bg-primary-500 scale-125' 
-                      : 'bg-primary-800'
+                    ? 'bg-primary-600' 
+                    : currentStep === index + 1
+                      ? 'bg-white' 
+                      : 'bg-gray-600'
                 }`}
               />
             ))}
           </div>
           
-          <form>
+          <form onSubmit={handleSubmit}>
             {/* Step 1: Personal Information */}
-            <div className={`${currentStep === 1 ? 'block fade-in' : 'hidden'}`}>
-              <div className="text-center mb-6 pb-2 border-b border-primary-800/30">
-                <h3 className="text-lg font-medium">Personal Information</h3>
+            {currentStep === 1 && (
+              <div className="space-y-4 fade-in">
+                <h3 className="text-lg font-semibold text-primary-400 mb-4">Personal Information</h3>
+                
+                <FormInput
+                  label="Full Name"
+                  name="fullName"
+                  value={formData.fullName}
+                  placeholder="Enter your full name"
+                  onChange={handleChange}
+                  required
+                />
+                
+                <FormInput
+                  label="Email"
+                  name="email"
+                  type="email"
+                  value={formData.email}
+                  placeholder="Enter your email address"
+                  onChange={handleChange}
+                  required
+                />
+                
+                <FormInput
+                  label="Phone Number"
+                  name="phone"
+                  type="tel"
+                  value={formData.phone}
+                  placeholder="Enter your phone number"
+                  onChange={handleChange}
+                  required
+                />
+                
+                <FormInput
+                  label="Location"
+                  name="location"
+                  value={formData.location}
+                  placeholder="City, Country"
+                  onChange={handleChange}
+                  required
+                />
               </div>
-              
-              <div className="space-y-4">
-                <div>
-                  <label className="block text-sm text-gray-400 mb-1">
-                    Full Name<span className="text-red-500 ml-1">*</span>
-                  </label>
-                  <input
-                    type="text"
-                    name="fullName"
-                    value={formData.fullName}
-                    onChange={handleChange}
-                    className="w-full px-4 py-2 bg-primary-800/50 border border-primary-700/30 rounded-lg text-white"
-                  />
-                  {errors.fullName && <p className="text-red-500 text-xs mt-1">{errors.fullName}</p>}
-                </div>
-                
-                <div>
-                  <label className="block text-sm text-gray-400 mb-1">
-                    Email Address<span className="text-red-500 ml-1">*</span>
-                  </label>
-                  <input
-                    type="email"
-                    name="email"
-                    value={formData.email}
-                    onChange={handleChange}
-                    className="w-full px-4 py-2 bg-primary-800/50 border border-primary-700/30 rounded-lg text-white"
-                  />
-                  {errors.email && <p className="text-red-500 text-xs mt-1">{errors.email}</p>}
-                </div>
-                
-                <div>
-                  <label className="block text-sm text-gray-400 mb-1">
-                    Phone Number<span className="text-red-500 ml-1">*</span>
-                  </label>
-                  <input
-                    type="tel"
-                    name="phone"
-                    value={formData.phone}
-                    onChange={handleChange}
-                    className="w-full px-4 py-2 bg-primary-800/50 border border-primary-700/30 rounded-lg text-white"
-                  />
-                  {errors.phone && <p className="text-red-500 text-xs mt-1">{errors.phone}</p>}
-                </div>
-                
-                <div>
-                  <label className="block text-sm text-gray-400 mb-1">
-                    Current Location<span className="text-red-500 ml-1">*</span>
-                  </label>
-                  <input
-                    type="text"
-                    name="location"
-                    value={formData.location}
-                    onChange={handleChange}
-                    className="w-full px-4 py-2 bg-primary-800/50 border border-primary-700/30 rounded-lg text-white"
-                  />
-                  {errors.location && <p className="text-red-500 text-xs mt-1">{errors.location}</p>}
-                </div>
-              </div>
-            </div>
+            )}
             
             {/* Step 2: Professional Experience */}
-            <div className={`${currentStep === 2 ? 'block fade-in' : 'hidden'}`}>
-              <div className="text-center mb-6 pb-2 border-b border-primary-800/30">
-                <h3 className="text-lg font-medium">Professional Experience</h3>
+            {currentStep === 2 && (
+              <div className="space-y-4 fade-in">
+                <h3 className="text-lg font-semibold text-primary-400 mb-4">Professional Experience</h3>
+                
+                <FormInput
+                  label="Current Position"
+                  name="currentPosition"
+                  value={formData.currentPosition}
+                  placeholder="Your current job title"
+                  onChange={handleChange}
+                  required
+                />
+                
+                <FormInput
+                  label="Company"
+                  name="company"
+                  value={formData.company}
+                  placeholder="Your current company"
+                  onChange={handleChange}
+                  required
+                />
+                
+                <FormInput
+                  label="Years of Experience"
+                  name="experience"
+                  type="select"
+                  value={formData.experience}
+                  onChange={handleChange}
+                  required
+                  options={[
+                    { value: '0-1', label: 'Less than 1 year' },
+                    { value: '1-3', label: '1-3 years' },
+                    { value: '3-5', label: '3-5 years' },
+                    { value: '5-10', label: '5-10 years' },
+                    { value: '10+', label: 'More than 10 years' }
+                  ]}
+                />
+                
+                <FormInput
+                  label="Relevant Experience Details"
+                  name="experienceDetails"
+                  type="textarea"
+                  value={formData.experienceDetails}
+                  placeholder="Brief description of your relevant experience..."
+                  onChange={handleChange}
+                  required
+                />
               </div>
-              
-              <div className="space-y-4">
-                <div>
-                  <label className="block text-sm text-gray-400 mb-1">
-                    Current/Most Recent Role<span className="text-red-500 ml-1">*</span>
-                  </label>
-                  <input
-                    type="text"
-                    name="currentPosition"
-                    value={formData.currentPosition}
-                    onChange={handleChange}
-                    className="w-full px-4 py-2 bg-primary-800/50 border border-primary-700/30 rounded-lg text-white"
-                  />
-                  {errors.currentPosition && <p className="text-red-500 text-xs mt-1">{errors.currentPosition}</p>}
-                </div>
-                
-                <div>
-                  <label className="block text-sm text-gray-400 mb-1">
-                    Company<span className="text-red-500 ml-1">*</span>
-                  </label>
-                  <input
-                    type="text"
-                    name="company"
-                    value={formData.company}
-                    onChange={handleChange}
-                    className="w-full px-4 py-2 bg-primary-800/50 border border-primary-700/30 rounded-lg text-white"
-                  />
-                  {errors.company && <p className="text-red-500 text-xs mt-1">{errors.company}</p>}
-                </div>
-                
-                <div>
-                  <label className="block text-sm text-gray-400 mb-1">
-                    Years of Experience<span className="text-red-500 ml-1">*</span>
-                  </label>
-                  <select
-                    name="experience"
-                    value={formData.experience}
-                    onChange={handleChange}
-                    className="w-full px-4 py-2 bg-primary-800/50 border border-primary-700/30 rounded-lg text-white appearance-none bg-[url('data:image/svg+xml;charset=utf-8,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20fill%3D%22none%22%20viewBox%3D%220%200%2020%2020%22%3E%3Cpath%20stroke%3D%22%2394a3b8%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%20stroke-width%3D%221.5%22%20d%3D%22M6%208l4%204%204-4%22%2F%3E%3C%2Fsvg%3E')] bg-[length:20px_20px] bg-[right_0.5rem_center] bg-no-repeat pr-10"
-                  >
-                    <option value="">Select</option>
-                    <option value="0-1">Less than 1 year</option>
-                    <option value="1-3">1-3 years</option>
-                    <option value="3-5">3-5 years</option>
-                    <option value="5-10">5-10 years</option>
-                    <option value="10+">10+ years</option>
-                  </select>
-                  {errors.experience && <p className="text-red-500 text-xs mt-1">{errors.experience}</p>}
-                </div>
-                
-                <div>
-                  <label className="block text-sm text-gray-400 mb-1">
-                    Describe your relevant experience<span className="text-red-500 ml-1">*</span>
-                  </label>
-                  <textarea
-                    name="experienceDetails"
-                    value={formData.experienceDetails}
-                    onChange={handleChange}
-                    rows={4}
-                    className="w-full px-4 py-2 bg-primary-800/50 border border-primary-700/30 rounded-lg text-white resize-none"
-                  />
-                  {errors.experienceDetails && <p className="text-red-500 text-xs mt-1">{errors.experienceDetails}</p>}
-                </div>
-              </div>
-            </div>
+            )}
             
             {/* Step 3: Skills & Qualifications */}
-            <div className={`${currentStep === 3 ? 'block fade-in' : 'hidden'}`}>
-              <div className="text-center mb-6 pb-2 border-b border-primary-800/30">
-                <h3 className="text-lg font-medium">Skills & Qualifications</h3>
-              </div>
-              
-              <div className="space-y-4">
-                <div>
-                  <label className="block text-sm text-gray-400 mb-1">
-                    Highest Education Level<span className="text-red-500 ml-1">*</span>
-                  </label>
-                  <select
-                    name="education"
-                    value={formData.education}
-                    onChange={handleChange}
-                    className="w-full px-4 py-2 bg-primary-800/50 border border-primary-700/30 rounded-lg text-white appearance-none bg-[url('data:image/svg+xml;charset=utf-8,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20fill%3D%22none%22%20viewBox%3D%220%200%2020%2020%22%3E%3Cpath%20stroke%3D%22%2394a3b8%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%20stroke-width%3D%221.5%22%20d%3D%22M6%208l4%204%204-4%22%2F%3E%3C%2Fsvg%3E')] bg-[length:20px_20px] bg-[right_0.5rem_center] bg-no-repeat pr-10"
-                  >
-                    <option value="">Select</option>
-                    <option value="high-school">High School</option>
-                    <option value="associate">Associate Degree</option>
-                    <option value="bachelor">Bachelor's Degree</option>
-                    <option value="master">Master's Degree</option>
-                    <option value="phd">PhD or Doctorate</option>
-                    <option value="bootcamp">Coding Bootcamp</option>
-                    <option value="self-taught">Self-taught</option>
-                  </select>
-                  {errors.education && <p className="text-red-500 text-xs mt-1">{errors.education}</p>}
-                </div>
+            {currentStep === 3 && (
+              <div className="space-y-4 fade-in">
+                <h3 className="text-lg font-semibold text-primary-400 mb-4">Skills & Qualifications</h3>
                 
-                <div>
-                  <label className="block text-sm text-gray-400 mb-2">
-                    Key Skills<span className="text-red-500 ml-1">*</span>
-                  </label>
-                  <div className="grid grid-cols-2 gap-2">
-                    <div className="flex items-center hover:bg-primary-800/30 p-1 rounded">
-                      <input
-                        type="checkbox"
-                        name="skill-React"
-                        id="skill-react"
-                        checked={formData.skills.includes('React')}
-                        onChange={handleChange}
-                        className="mr-2"
-                      />
-                      <label htmlFor="skill-react" className="text-sm cursor-pointer">React</label>
-                    </div>
-                    <div className="flex items-center hover:bg-primary-800/30 p-1 rounded">
-                      <input
-                        type="checkbox"
-                        name="skill-Node.js"
-                        id="skill-node"
-                        checked={formData.skills.includes('Node.js')}
-                        onChange={handleChange}
-                        className="mr-2"
-                      />
-                      <label htmlFor="skill-node" className="text-sm cursor-pointer">Node.js</label>
-                    </div>
-                    <div className="flex items-center hover:bg-primary-800/30 p-1 rounded">
-                      <input
-                        type="checkbox"
-                        name="skill-TypeScript"
-                        id="skill-typescript"
-                        checked={formData.skills.includes('TypeScript')}
-                        onChange={handleChange}
-                        className="mr-2"
-                      />
-                      <label htmlFor="skill-typescript" className="text-sm cursor-pointer">TypeScript</label>
-                    </div>
-                    <div className="flex items-center hover:bg-primary-800/30 p-1 rounded">
-                      <input
-                        type="checkbox"
-                        name="skill-Python"
-                        id="skill-python"
-                        checked={formData.skills.includes('Python')}
-                        onChange={handleChange}
-                        className="mr-2"
-                      />
-                      <label htmlFor="skill-python" className="text-sm cursor-pointer">Python</label>
-                    </div>
-                    <div className="flex items-center hover:bg-primary-800/30 p-1 rounded">
-                      <input
-                        type="checkbox"
-                        name="skill-AI/ML"
-                        id="skill-ai-ml"
-                        checked={formData.skills.includes('AI/ML')}
-                        onChange={handleChange}
-                        className="mr-2"
-                      />
-                      <label htmlFor="skill-ai-ml" className="text-sm cursor-pointer">AI/ML</label>
-                    </div>
-                    <div className="flex items-center hover:bg-primary-800/30 p-1 rounded">
-                      <input
-                        type="checkbox"
-                        name="skill-Cloud Architecture"
-                        id="skill-cloud"
-                        checked={formData.skills.includes('Cloud Architecture')}
-                        onChange={handleChange}
-                        className="mr-2"
-                      />
-                      <label htmlFor="skill-cloud" className="text-sm cursor-pointer">Cloud Architecture</label>
-                    </div>
-                  </div>
-                  {errors.skills && <p className="text-red-500 text-xs mt-1">{errors.skills}</p>}
-                </div>
+                <FormInput
+                  label="Highest Education Level"
+                  name="education"
+                  type="select"
+                  value={formData.education}
+                  onChange={handleChange}
+                  required
+                  options={[
+                    { value: 'high-school', label: 'High School' },
+                    { value: 'associate', label: 'Associate Degree' },
+                    { value: 'bachelor', label: 'Bachelor\'s Degree' },
+                    { value: 'master', label: 'Master\'s Degree' },
+                    { value: 'phd', label: 'PhD / Doctorate' },
+                    { value: 'self-taught', label: 'Self Taught' }
+                  ]}
+                />
                 
-                <div>
-                  <label className="block text-sm text-gray-400 mb-1">
-                    Portfolio URL
+                <div className="mb-4">
+                  <label className="block text-sm font-medium text-gray-300 mb-2">
+                    Skills <span className="text-red-500">*</span>
                   </label>
-                  <input
-                    type="url"
-                    name="portfolio"
-                    value={formData.portfolio}
-                    onChange={handleChange}
-                    placeholder="https://yourportfolio.com"
-                    className="w-full px-4 py-2 bg-primary-800/50 border border-primary-700/30 rounded-lg text-white"
-                  />
-                </div>
-                
-                <div>
-                  <label className="block text-sm text-gray-400 mb-1">
-                    GitHub Profile
-                  </label>
-                  <input
-                    type="url"
-                    name="github"
-                    value={formData.github}
-                    onChange={handleChange}
-                    placeholder="https://github.com/yourusername"
-                    className="w-full px-4 py-2 bg-primary-800/50 border border-primary-700/30 rounded-lg text-white"
-                  />
-                </div>
-                
-                <div>
-                  <label className="block text-sm text-gray-400 mb-1">
-                    LinkedIn Profile
-                  </label>
-                  <input
-                    type="url"
-                    name="linkedin"
-                    value={formData.linkedin}
-                    onChange={handleChange}
-                    placeholder="https://linkedin.com/in/yourprofile"
-                    className="w-full px-4 py-2 bg-primary-800/50 border border-primary-700/30 rounded-lg text-white"
-                  />
-                </div>
-              </div>
-            </div>
-            
-            {/* Step 4: Resume & Final Details */}
-            <div className={`${currentStep === 4 ? 'block fade-in' : 'hidden'}`}>
-              <div className="text-center mb-6 pb-2 border-b border-primary-800/30">
-                <h3 className="text-lg font-medium">Resume & Final Details</h3>
-              </div>
-              
-              <div className="space-y-4">
-                <div>
-                  <label className="block text-sm text-gray-400 mb-2">
-                    Upload Resume/CV<span className="text-red-500 ml-1">*</span>
-                  </label>
-                  <div className="border-2 border-dashed border-primary-700/50 rounded-lg p-6 text-center hover:bg-primary-800/20 transition-colors cursor-pointer relative">
-                    <input
-                      type="file"
-                      name="resume"
-                      onChange={handleChange}
-                      accept=".pdf,.doc,.docx"
-                      className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
-                    />
-                    <FaFileUpload className="mx-auto text-4xl text-gray-400 mb-2" />
-                    <p className="text-gray-400 mb-1">Drag & drop your resume, or click to browse</p>
-                    {formData.resumeName && (
-                      <p className="text-primary-400 text-sm mt-2">{formData.resumeName}</p>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4">
+                    {position === 'CTO' && (
+                      <>
+                        <SkillCheckbox 
+                          skill="Leadership" 
+                          isSelected={formData.skills.includes('Leadership')}
+                          onChange={handleChange}
+                        />
+                        <SkillCheckbox 
+                          skill="AI/ML" 
+                          isSelected={formData.skills.includes('AI/ML')}
+                          onChange={handleChange}
+                        />
+                        <SkillCheckbox 
+                          skill="Cloud Architecture" 
+                          isSelected={formData.skills.includes('Cloud Architecture')}
+                          onChange={handleChange}
+                        />
+                        <SkillCheckbox 
+                          skill="System Design" 
+                          isSelected={formData.skills.includes('System Design')}
+                          onChange={handleChange}
+                        />
+                        <SkillCheckbox 
+                          skill="Team Management" 
+                          isSelected={formData.skills.includes('Team Management')}
+                          onChange={handleChange}
+                        />
+                        <SkillCheckbox 
+                          skill="Product Strategy" 
+                          isSelected={formData.skills.includes('Product Strategy')}
+                          onChange={handleChange}
+                        />
+                      </>
+                    )}
+                    
+                    {position === 'Full-Stack Developer' && (
+                      <>
+                        <SkillCheckbox 
+                          skill="React" 
+                          isSelected={formData.skills.includes('React')}
+                          onChange={handleChange}
+                        />
+                        <SkillCheckbox 
+                          skill="Next.js" 
+                          isSelected={formData.skills.includes('Next.js')}
+                          onChange={handleChange}
+                        />
+                        <SkillCheckbox 
+                          skill="Node.js" 
+                          isSelected={formData.skills.includes('Node.js')}
+                          onChange={handleChange}
+                        />
+                        <SkillCheckbox 
+                          skill="TypeScript" 
+                          isSelected={formData.skills.includes('TypeScript')}
+                          onChange={handleChange}
+                        />
+                        <SkillCheckbox 
+                          skill="Database Design" 
+                          isSelected={formData.skills.includes('Database Design')}
+                          onChange={handleChange}
+                        />
+                        <SkillCheckbox 
+                          skill="API Development" 
+                          isSelected={formData.skills.includes('API Development')}
+                          onChange={handleChange}
+                        />
+                      </>
+                    )}
+                    
+                    {position === 'AI Engineer' && (
+                      <>
+                        <SkillCheckbox 
+                          skill="Machine Learning" 
+                          isSelected={formData.skills.includes('Machine Learning')}
+                          onChange={handleChange}
+                        />
+                        <SkillCheckbox 
+                          skill="NLP" 
+                          isSelected={formData.skills.includes('NLP')}
+                          onChange={handleChange}
+                        />
+                        <SkillCheckbox 
+                          skill="Python" 
+                          isSelected={formData.skills.includes('Python')}
+                          onChange={handleChange}
+                        />
+                        <SkillCheckbox 
+                          skill="LLM Fine-Tuning" 
+                          isSelected={formData.skills.includes('LLM Fine-Tuning')}
+                          onChange={handleChange}
+                        />
+                        <SkillCheckbox 
+                          skill="TensorFlow/PyTorch" 
+                          isSelected={formData.skills.includes('TensorFlow/PyTorch')}
+                          onChange={handleChange}
+                        />
+                        <SkillCheckbox 
+                          skill="Data Science" 
+                          isSelected={formData.skills.includes('Data Science')}
+                          onChange={handleChange}
+                        />
+                      </>
                     )}
                   </div>
-                  {errors.resume && <p className="text-red-500 text-xs mt-1">{errors.resume}</p>}
+                  {errors.skills && (
+                    <p className="text-sm text-red-500 mt-1">{errors.skills}</p>
+                  )}
                 </div>
                 
-                <div>
-                  <label className="block text-sm text-gray-400 mb-1">
-                    When can you start?<span className="text-red-500 ml-1">*</span>
-                  </label>
-                  <select
-                    name="startDate"
-                    value={formData.startDate}
-                    onChange={handleChange}
-                    className="w-full px-4 py-2 bg-primary-800/50 border border-primary-700/30 rounded-lg text-white appearance-none bg-[url('data:image/svg+xml;charset=utf-8,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20fill%3D%22none%22%20viewBox%3D%220%200%2020%2020%22%3E%3Cpath%20stroke%3D%22%2394a3b8%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%20stroke-width%3D%221.5%22%20d%3D%22M6%208l4%204%204-4%22%2F%3E%3C%2Fsvg%3E')] bg-[length:20px_20px] bg-[right_0.5rem_center] bg-no-repeat pr-10"
-                  >
-                    <option value="">Select</option>
-                    <option value="immediately">Immediately</option>
-                    <option value="2-weeks">2 weeks</option>
-                    <option value="1-month">1 month</option>
-                    <option value="2-months">2+ months</option>
-                  </select>
-                  {errors.startDate && <p className="text-red-500 text-xs mt-1">{errors.startDate}</p>}
-                </div>
+                <FormInput
+                  label="Portfolio URL"
+                  name="portfolio"
+                  value={formData.portfolio}
+                  placeholder="https://yourportfolio.com"
+                  onChange={handleChange}
+                />
                 
-                <div>
-                  <label className="block text-sm text-gray-400 mb-1">
-                    Why do you want to join LaunchAI?<span className="text-red-500 ml-1">*</span>
-                  </label>
-                  <textarea
-                    name="whyJoin"
-                    value={formData.whyJoin}
-                    onChange={handleChange}
-                    rows={4}
-                    className="w-full px-4 py-2 bg-primary-800/50 border border-primary-700/30 rounded-lg text-white resize-none"
-                  />
-                  {errors.whyJoin && <p className="text-red-500 text-xs mt-1">{errors.whyJoin}</p>}
-                </div>
+                <FormInput
+                  label="GitHub URL"
+                  name="github"
+                  value={formData.github}
+                  placeholder="https://github.com/username"
+                  onChange={handleChange}
+                />
                 
-                <div className="flex items-start mt-4">
-                  <input
-                    type="checkbox"
-                    name="terms"
-                    id="terms"
-                    checked={formData.terms}
-                    onChange={handleChange}
-                    className="mt-1 mr-2"
-                  />
-                  <label htmlFor="terms" className="text-sm text-gray-400">
-                    I agree to the processing of my personal data for recruitment purposes<span className="text-red-500 ml-1">*</span>
-                  </label>
-                </div>
-                {errors.terms && <p className="text-red-500 text-xs mt-1">{errors.terms}</p>}
+                <FormInput
+                  label="LinkedIn URL"
+                  name="linkedin"
+                  value={formData.linkedin}
+                  placeholder="https://linkedin.com/in/username"
+                  onChange={handleChange}
+                />
               </div>
-            </div>
+            )}
+            
+            {/* Step 4: Final Details */}
+            {currentStep === 4 && (
+              <div className="space-y-4 fade-in">
+                <h3 className="text-lg font-semibold text-primary-400 mb-4">Final Details</h3>
+                
+                <FormInput
+                  label="Resume"
+                  name="resume"
+                  type="file"
+                  value={formData.resumeName}
+                  onChange={handleChange}
+                  required
+                />
+                
+                <FormInput
+                  label="Earliest Start Date"
+                  name="startDate"
+                  type="select"
+                  value={formData.startDate}
+                  onChange={handleChange}
+                  required
+                  options={[
+                    { value: 'immediately', label: 'Immediately' },
+                    { value: '2-weeks', label: '2 Weeks Notice' },
+                    { value: '1-month', label: '1 Month Notice' },
+                    { value: '3-months', label: '3+ Months' },
+                  ]}
+                />
+                
+                <FormInput
+                  label="Why do you want to join LaunchAI?"
+                  name="whyJoin"
+                  type="textarea"
+                  value={formData.whyJoin}
+                  placeholder="Tell us why you're interested in this position and what you can bring to the team..."
+                  onChange={handleChange}
+                  required
+                />
+                
+                <FormInput
+                  label=""
+                  name="terms"
+                  type="checkbox"
+                  value={formData.terms}
+                  onChange={handleChange}
+                  required
+                />
+              </div>
+            )}
             
             {/* Navigation buttons */}
             <div className="flex justify-between mt-8">
@@ -630,9 +814,9 @@ export default function JobApplicationForm({ position, onClose, onNotification }
                 <button
                   type="button"
                   onClick={prevStep}
-                  className="btn-hover-effect px-5 py-2 bg-primary-800/70 rounded-lg font-medium text-white"
+                  className="px-4 py-2 text-gray-300 hover:text-white active:bg-primary-800/40 rounded transition-colors"
                 >
-                  <span>Previous</span>
+                  Back
                 </button>
               ) : (
                 <div></div>
@@ -642,17 +826,21 @@ export default function JobApplicationForm({ position, onClose, onNotification }
                 <button
                   type="button"
                   onClick={nextStep}
-                  className="btn-hover-effect px-5 py-2 bg-gradient-to-r from-primary-600 to-primary-800 rounded-lg font-medium text-white"
+                  className="px-6 py-2 bg-gradient-to-r from-primary-600 to-primary-800 rounded-lg text-white hover:from-primary-500 hover:to-primary-700 active:scale-95 transform transition-transform"
                 >
-                  <span>Next</span>
+                  Next
                 </button>
               ) : (
                 <button
-                  type="button"
-                  onClick={handleSubmit}
-                  className="btn-hover-effect px-5 py-2 bg-gradient-to-r from-green-600 to-green-800 rounded-lg font-medium text-white"
+                  type="submit"
+                  disabled={isSubmitting}
+                  className={`px-6 py-2 rounded-lg ${
+                    isSubmitting 
+                      ? 'bg-gray-700 text-gray-400 cursor-not-allowed' 
+                      : 'bg-gradient-to-r from-primary-600 to-primary-800 text-white hover:from-primary-500 hover:to-primary-700 active:scale-95 transform transition-transform'
+                  }`}
                 >
-                  <span>Submit Application</span>
+                  {isSubmitting ? 'Submitting...' : 'Submit Application'}
                 </button>
               )}
             </div>
