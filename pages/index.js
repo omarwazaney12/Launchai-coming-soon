@@ -122,7 +122,7 @@ export default function Home() {
                     onClick={openSurveyForm}
                     className="w-full btn-hover-effect px-6 py-4 bg-gradient-to-r from-primary-600 to-primary-800 rounded-lg font-semibold text-white shadow-lg hover:scale-105 active:scale-95 transition-transform"
                   >
-                    <span>Sign Up For Free Trial</span>
+                    <span>Get Early Access</span>
                   </button>
                 </div>
               </div>
