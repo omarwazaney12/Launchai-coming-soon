@@ -22,29 +22,24 @@ export default function Home() {
 
   // Initialize SurveyMonkey widget
   useEffect(() => {
-    // Add SurveyMonkey script with auto-display disabled
+    // Create a script element for SurveyMonkey with popup mode
     const script = document.createElement('script');
-    script.innerHTML = `(function(t,e,s,n){var o,a,c;t.SMCX=t.SMCX||[],e.getElementById(n)||(o=e.getElementsByTagName(s),a=o[o.length-1],c=e.createElement(s),c.type="text/javascript",c.async=!0,c.id=n,c.src="https://widget.surveymonkey.com/collect/website/js/tRaiETqnLgj758hTBazgd4xLwA22va5PfWzzV1_2FuLGv0DZF1tvUvKRUtT8I7_2BFV3.js",a.parentNode.insertBefore(c,a))})(window,document,"script","smcx-sdk")`;
+    script.id = "smcx-sdk";
+    script.async = true;
+    script.defer = true;
+    // This is the key change - using the popup version of the script
+    script.src = "https://www.surveymonkey.com/survey-taken/popup-javascript?sm=tRaiETqnLgj758hTBazgd4xLwA22va5PfWzzV1_2FuLGv0DZF1tvUvKRUtT8I7_2BFV3";
     document.body.appendChild(script);
 
-    // Hide SurveyMonkey popup that appears at the bottom
-    const hideWidget = setInterval(() => {
-      // Find the SurveyMonkey widget container
-      const smContainer = document.querySelector('.smcx-widget');
-      if (smContainer) {
-        smContainer.style.display = 'none';
-        clearInterval(hideWidget);
-        
-        // Store reference to show function for the button click
-        window.showSurveyMonkey = function() {
-          smContainer.style.display = 'block';
-        };
-      }
-    }, 100);
+    // Define the SurveyMonkey settings for popup mode
+    window.SurveyMonkeyPopup = {
+      disablePopup: true // Disable automatic popup
+    };
 
     return () => {
-      document.body.removeChild(script);
-      clearInterval(hideWidget);
+      if (script.parentNode) {
+        document.body.removeChild(script);
+      }
     };
   }, []);
 
@@ -73,11 +68,11 @@ export default function Home() {
   };
 
   const openSurveyForm = () => {
-    // Use our custom function to show SurveyMonkey widget
-    if (window.showSurveyMonkey) {
-      window.showSurveyMonkey();
+    // Trigger the SurveyMonkey popup
+    if (window.smcx && window.smcx.show) {
+      window.smcx.show();
     } else {
-      // Fallback if SurveyMonkey hasn't loaded
+      // Fallback to our custom form if SurveyMonkey isn't loaded
       setSurveyFormVisible(true);
     }
   };
