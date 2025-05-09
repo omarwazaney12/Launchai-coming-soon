@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import Head from 'next/head';
 import { FaInstagram } from 'react-icons/fa/index.js';
 import Background from '../components/Background';
@@ -19,6 +19,18 @@ export default function Home() {
     type: 'success',
     show: false
   });
+
+  // Initialize SurveyMonkey widget
+  useEffect(() => {
+    // Add SurveyMonkey script
+    const script = document.createElement('script');
+    script.innerHTML = `(function(t,e,s,n){var o,a,c;t.SMCX=t.SMCX||[],e.getElementById(n)||(o=e.getElementsByTagName(s),a=o[o.length-1],c=e.createElement(s),c.type="text/javascript",c.async=!0,c.id=n,c.src="https://widget.surveymonkey.com/collect/website/js/tRaiETqnLgj758hTBazgd4xLwA22va5PfWzzV1_2FuLGv0DZF1tvUvKRUtT8I7_2BFV3.js",a.parentNode.insertBefore(c,a))})(window,document,"script","smcx-sdk")`;
+    document.body.appendChild(script);
+
+    return () => {
+      document.body.removeChild(script);
+    };
+  }, []);
 
   const handleShowNotification = (message, type = 'success') => {
     setNotification({
@@ -45,7 +57,13 @@ export default function Home() {
   };
 
   const openSurveyForm = () => {
-    setSurveyFormVisible(true);
+    // Use SurveyMonkey widget instead of our custom form
+    if (window.SMCX && typeof window.SMCX.show === 'function') {
+      window.SMCX.show();
+    } else {
+      // Fallback if SurveyMonkey hasn't loaded
+      setSurveyFormVisible(true);
+    }
   };
 
   const closeSurveyForm = () => {
@@ -228,7 +246,7 @@ export default function Home() {
         />
       )}
 
-      {/* Survey Form Modal */}
+      {/* Fall back to custom Survey Form Modal if SurveyMonkey fails to load */}
       {surveyFormVisible && (
         <SurveyForm
           onClose={closeSurveyForm}
