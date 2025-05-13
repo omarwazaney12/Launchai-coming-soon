@@ -56,6 +56,7 @@ export default function SurveyForm({ onClose, onNotification }) {
   // Get all current input values when needed
   const collectFormData = () => {
     const newData = { ...formData };
+    newData.accessReasons = newData.accessReasons || [];
     
     Object.keys(formRefs.current).forEach(refKey => {
       const element = formRefs.current[refKey];
@@ -66,9 +67,15 @@ export default function SurveyForm({ onClose, onNotification }) {
       
       if (!type || !fieldName) return;
       
-      if (type === 'radio') {
-        if (element.checked) {
-          newData[fieldName] = optionValue;
+      if (type === 'checkbox' && fieldName === 'accessReason') {
+        if (element.checked && optionValue) {
+          // Add to the array if not already included
+          if (!newData.accessReasons.includes(optionValue)) {
+            newData.accessReasons.push(optionValue);
+          }
+        } else if (!element.checked && optionValue) {
+          // Remove from array if unchecked
+          newData.accessReasons = newData.accessReasons.filter(value => value !== optionValue);
         }
       } else if (type === 'text' || type === 'textarea' || type === 'email') {
         newData[fieldName] = element.value;
@@ -107,9 +114,9 @@ export default function SurveyForm({ onClose, onNotification }) {
         required: true
       },
       {
-        type: "radio",
+        type: "checkbox",
         name: "accessReason",
-        label: "What's your main reason for wanting early access to LaunchAI?",
+        label: "What's your main reason for wanting early access to LaunchAI? (select all that apply)",
         required: true,
         options: [
           "I need help validating my startup idea (market research, competitors, customer validation)",
@@ -125,7 +132,7 @@ export default function SurveyForm({ onClose, onNotification }) {
       {
         type: "textarea",
         name: "reasonExplanation",
-        label: "Why did you choose this reason?",
+        label: "What would it mean for you to finally launch your idea?",
         required: true
       },
       {
@@ -153,8 +160,11 @@ export default function SurveyForm({ onClose, onNotification }) {
     // Check each required field
     surveyData.questions.forEach(question => {
       if (question.required) {
-        if (question.type === 'radio' && !data[question.name]) {
-          newErrors[question.name] = `Please select an option`;
+        if (question.type === 'checkbox' && question.name === 'accessReason') {
+          // Check if at least one option is selected
+          if (!data.accessReasons || data.accessReasons.length === 0) {
+            newErrors[question.name] = `Please select at least one option`;
+          }
         } 
         else if (!data[question.name] || !data[question.name].trim()) {
           newErrors[question.name] = `This field is required`;
@@ -194,7 +204,7 @@ export default function SurveyForm({ onClose, onNotification }) {
             mobile: currentData.mobile || null,
             source: 'early-access-form',
             about_self: currentData.aboutSelf || '',
-            access_reason: currentData.accessReason || '',
+            access_reason: currentData.accessReasons ? currentData.accessReasons.join(', ') : '',
             reason_explanation: currentData.reasonExplanation || ''
           }
         ]);
@@ -243,44 +253,47 @@ export default function SurveyForm({ onClose, onNotification }) {
     const error = errors[key];
     
     switch (question.type) {
-      case 'radio':
-        return (
-          <div className="space-y-2">
-            {question.options.map((option, optionIndex) => {
-              const optionKey = `${key}-${optionIndex}`;
-              const isSelected = value === option;
-              const isTouched = touchedInputs[key + option] || false;
-              const refKey = `radio|${key}|${option}`;
-              
-              return (
-                <div 
-                  key={optionIndex} 
-                  className={`flex items-center ${isTouched ? 'bg-primary-900/60' : ''} ${isSelected ? 'bg-primary-800/40' : ''} transition-colors rounded p-2 mb-1 active:bg-primary-800/40`}
-                >
-                  <input
-                    type="radio"
-                    id={optionKey}
-                    name={key}
-                    ref={(el) => setInputRef(refKey, el)}
-                    className="w-5 h-5 text-primary-600 border-gray-600 focus:ring-primary-500 bg-gray-800"
-                    defaultChecked={isSelected}
-                    onChange={() => handleChange('radio', key, option)}
-                  />
-                  <label 
-                    htmlFor={optionKey} 
-                    className="ml-3 text-sm text-gray-300 flex-1 py-1"
-                    onClick={() => handleChange('radio', key, option)}
+      case 'checkbox':
+        if (key === 'accessReason') {
+          return (
+            <div className="space-y-2">
+              {question.options.map((option, optionIndex) => {
+                const optionKey = `${key}-${optionIndex}`;
+                const isSelected = formData.accessReasons && formData.accessReasons.includes(option);
+                const isTouched = touchedInputs[key + option] || false;
+                const refKey = `checkbox|${key}|${option}`;
+                
+                return (
+                  <div 
+                    key={optionIndex} 
+                    className={`flex items-center ${isTouched ? 'bg-primary-900/60' : ''} ${isSelected ? 'bg-primary-800/40' : ''} transition-colors rounded p-2 mb-1 active:bg-primary-800/40`}
                   >
-                    {option}
-                  </label>
-                </div>
-              );
-            })}
-            {error && (
-              <p className="text-sm text-red-500 mt-1">{error}</p>
-            )}
-          </div>
-        );
+                    <input
+                      type="checkbox"
+                      id={optionKey}
+                      name={optionKey}
+                      ref={(el) => setInputRef(refKey, el)}
+                      className="w-5 h-5 text-primary-600 border-gray-600 focus:ring-primary-500 bg-gray-800 rounded"
+                      defaultChecked={isSelected}
+                      onChange={() => handleChange('checkbox', key, option)}
+                    />
+                    <label 
+                      htmlFor={optionKey} 
+                      className="ml-3 text-sm text-gray-300 flex-1 py-1"
+                      onClick={() => handleChange('checkbox', key, option)}
+                    >
+                      {option}
+                    </label>
+                  </div>
+                );
+              })}
+              {error && (
+                <p className="text-sm text-red-500 mt-1">{error}</p>
+              )}
+            </div>
+          );
+        }
+        return null;
       
       case 'textarea':
         return (
