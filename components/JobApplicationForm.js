@@ -340,6 +340,7 @@ export default function JobApplicationForm({ position, onClose, onNotification }
             placeholder={placeholder}
             onChange={onChange}
             autoComplete="off"
+            key={`textarea-${name}`}
             rows="4"
             className={`w-full p-3 bg-primary-800/70 border ${error ? 'border-red-500' : 'border-primary-700/50'} rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-primary-500 ${isTouched ? 'bg-primary-800' : ''}`}
           />
@@ -389,6 +390,7 @@ export default function JobApplicationForm({ position, onClose, onNotification }
             placeholder={placeholder}
             onChange={onChange}
             autoComplete="off"
+            key={`input-${name}`}
             className={`w-full p-3 bg-primary-800/70 border ${error ? 'border-red-500' : 'border-primary-700/50'} rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-primary-500 ${isTouched ? 'bg-primary-800' : ''}`}
           />
         )}

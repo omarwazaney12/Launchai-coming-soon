@@ -444,6 +444,7 @@ export default function SurveyForm({ onClose, onNotification }) {
             placeholder={question.placeholder}
             value={formData[key] || ''}
             autoComplete="off"
+            key={`textarea-${key}`}
             onChange={(e) => handleImmediateChange(sectionIndex, questionIndex, e.target.value)}
           />
         );
@@ -455,7 +456,8 @@ export default function SurveyForm({ onClose, onNotification }) {
             className="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded-md text-white placeholder-gray-500 focus:outline-none focus:border-primary-500 focus:ring-1 focus:ring-primary-500/50"
             placeholder={question.placeholder}
             value={formData[key] || ''}
-            autoComplete="off" 
+            autoComplete="off"
+            key={`input-${key}`}
             onChange={(e) => handleImmediateChange(sectionIndex, questionIndex, e.target.value)}
           />
         );
