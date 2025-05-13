@@ -81,18 +81,19 @@ export default function JobApplicationForm({ position, onClose, onNotification }
   };
   
   // Handle immediate UI feedback and state update
-  const handleChange = (type, name, checked = false) => {
+  const handleChange = (e) => {
+    const { name, type, checked, value, files } = e.target;
+    
     // Skip if scrolling to avoid accidental selections
     if (isScrolling && (type === 'checkbox' || type === 'radio')) return;
     
     // For file uploads, we need to capture the file data differently
     if (type === 'file') {
-      const element = formRefs.current[`file|${name}`];
-      if (element && element.files && element.files.length > 0) {
+      if (files && files.length > 0) {
         setFormData(prev => ({ 
           ...prev, 
-          resume: element.files[0],
-          resumeName: element.files[0].name
+          resume: files[0],
+          resumeName: files[0].name
         }));
       }
       return;
@@ -127,26 +128,29 @@ export default function JobApplicationForm({ position, onClose, onNotification }
   const collectFormData = () => {
     const collectedData = { ...formData };
     
-    // Loop through all refs and get their current values
-    Object.keys(formRefs.current).forEach(refKey => {
-      const element = formRefs.current[refKey];
-      if (!element) return;
-      
-      // Split the refKey to get input type and name
-      const [type, name] = refKey.split('|');
-      
-      if (type === 'checkbox') {
-        if (name === 'terms') {
-          collectedData.terms = element.checked;
-        } else if (name.startsWith('skill-')) {
-          // Skills are handled separately and stored in the skills array
+    // Get values from all input fields in the form
+    const formElement = document.querySelector('form');
+    if (formElement) {
+      const inputs = formElement.querySelectorAll('input, textarea, select');
+      inputs.forEach(input => {
+        const { name, type, value, checked, files } = input;
+        
+        if (name) {
+          if (type === 'checkbox') {
+            if (name === 'terms') {
+              collectedData.terms = checked;
+            } else if (name.startsWith('skill-')) {
+              // Skills are already handled via state
+            }
+          } else if (type === 'file') {
+            // File inputs are handled separately
+          } else if (type !== 'radio' || checked) {
+            // For radio buttons, only collect checked ones
+            collectedData[name] = value;
+          }
         }
-      } else if (type === 'file') {
-        // File inputs are handled separately
-      } else if (name) {
-        collectedData[name] = element.value;
-      }
-    });
+      });
+    }
     
     return collectedData;
   };
@@ -350,19 +354,7 @@ export default function JobApplicationForm({ position, onClose, onNotification }
   const FormInput = ({ label, name, type = 'text', defaultValue = '', placeholder = '', required = false, options = [], onChange }) => {
     const isTouched = touchedInputs[name] || false;
     const error = errors[name];
-    const refKey = `${type}|${name}`;
-    
-    // Create onChange handler that matches SurveyForm's approach
-    const handleInputChange = () => {
-      if (type === 'checkbox') {
-        const element = formRefs.current[refKey];
-        if (element) {
-          onChange(type, name, element.checked);
-        }
-      } else {
-        onChange(type, name);
-      }
-    };
+    const inputKey = `input-${name}-${Math.random().toString(36).substring(7)}`;
     
     return (
       <div className="mb-4">
@@ -377,9 +369,9 @@ export default function JobApplicationForm({ position, onClose, onNotification }
           <select
             id={name}
             name={name}
+            key={inputKey}
             defaultValue={defaultValue}
-            ref={(el) => setInputRef(refKey, el)}
-            onChange={handleInputChange}
+            onChange={onChange}
             className={`w-full p-3 bg-primary-800/70 border ${error ? 'border-red-500' : 'border-primary-700/50'} rounded-lg text-white focus:outline-none focus:border-primary-500 ${isTouched ? 'bg-primary-800' : ''}`}
           >
             <option value="">Select an option</option>
@@ -393,10 +385,10 @@ export default function JobApplicationForm({ position, onClose, onNotification }
           <textarea
             id={name}
             name={name}
+            key={inputKey}
             defaultValue={defaultValue}
             placeholder={placeholder}
-            ref={(el) => setInputRef(refKey, el)}
-            onChange={handleInputChange}
+            onChange={onChange}
             autoComplete="off"
             rows="4"
             className={`w-full p-3 bg-primary-800/70 border ${error ? 'border-red-500' : 'border-primary-700/50'} rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-primary-500 ${isTouched ? 'bg-primary-800' : ''}`}
@@ -415,8 +407,8 @@ export default function JobApplicationForm({ position, onClose, onNotification }
                 type="file"
                 id={name}
                 name={name}
-                ref={(el) => setInputRef(`file|${name}`, el)}
-                onChange={() => onChange('file', name)}
+                key={inputKey}
+                onChange={onChange}
                 accept=".pdf,.doc,.docx"
                 className="hidden"
               />
@@ -428,9 +420,9 @@ export default function JobApplicationForm({ position, onClose, onNotification }
               type="checkbox"
               id={name}
               name={name}
+              key={inputKey}
               defaultChecked={defaultValue}
-              ref={(el) => setInputRef(refKey, el)}
-              onChange={handleInputChange}
+              onChange={onChange}
               className="w-5 h-5 text-primary-600 border-gray-700 rounded bg-primary-900 focus:ring-primary-500"
             />
             <label 
@@ -445,10 +437,10 @@ export default function JobApplicationForm({ position, onClose, onNotification }
             type={type}
             id={name}
             name={name}
+            key={inputKey}
             defaultValue={defaultValue}
             placeholder={placeholder}
-            ref={(el) => setInputRef(refKey, el)}
-            onChange={handleInputChange}
+            onChange={onChange}
             autoComplete="off"
             className={`w-full p-3 bg-primary-800/70 border ${error ? 'border-red-500' : 'border-primary-700/50'} rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-primary-500 ${isTouched ? 'bg-primary-800' : ''}`}
           />
@@ -465,7 +457,7 @@ export default function JobApplicationForm({ position, onClose, onNotification }
   const SkillCheckbox = ({ skill, isSelected, onChange }) => {
     const name = `skill-${skill}`;
     const isTouched = touchedInputs[name] || false;
-    const refKey = `checkbox|${name}`;
+    const checkboxKey = `checkbox-${name}-${Math.random().toString(36).substring(7)}`;
     
     return (
       <div 
@@ -475,26 +467,14 @@ export default function JobApplicationForm({ position, onClose, onNotification }
           type="checkbox"
           id={name}
           name={name}
+          key={checkboxKey}
           defaultChecked={isSelected}
-          ref={(el) => setInputRef(refKey, el)}
-          onChange={() => {
-            const element = formRefs.current[refKey];
-            if (element) {
-              onChange('checkbox', name, element.checked);
-            }
-          }}
+          onChange={onChange}
           className="w-5 h-5 text-primary-600 border-gray-700 rounded bg-primary-900 focus:ring-primary-500"
         />
         <label 
           htmlFor={name} 
           className="ml-3 block text-sm text-gray-300 flex-1 py-1"
-          onClick={() => {
-            const element = formRefs.current[refKey];
-            if (element) {
-              element.checked = !element.checked;
-              onChange('checkbox', name, element.checked);
-            }
-          }}
         >
           {skill}
         </label>
@@ -530,7 +510,7 @@ export default function JobApplicationForm({ position, onClose, onNotification }
           <div className="flex justify-center mb-8">
             {Array.from({ length: totalSteps }).map((_, index) => (
               <div 
-                key={index} 
+                key={`step-${index}`}
                 className={`w-3 h-3 rounded-full mx-1 ${
                   currentStep > index + 1 
                     ? 'bg-primary-600' 
