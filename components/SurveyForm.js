@@ -101,6 +101,17 @@ export default function SurveyForm({ onClose, onNotification }) {
         return newErrors;
       });
     }
+
+    // If this is a checkbox and it's the "Other" option, update state to re-render
+    if (type === 'checkbox' && fieldName === 'accessReason' && value && value.startsWith('Other')) {
+      const currentData = collectFormData();
+      setFormData(currentData);
+    }
+  };
+
+  // Check if "Other" option is selected
+  const isOtherSelected = () => {
+    return formData.accessReasons && formData.accessReasons.some(reason => reason.startsWith('Other'));
   };
 
   // Simplified survey data structure
@@ -176,6 +187,11 @@ export default function SurveyForm({ onClose, onNotification }) {
     if (data.email && !validateEmail(data.email)) {
       newErrors.email = 'Please enter a valid email address';
     }
+
+    // Special validation for "Other" reason
+    if (isOtherSelected() && (!data.otherReason || !data.otherReason.trim())) {
+      newErrors.otherReason = 'Please specify your other reason';
+    }
     
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
@@ -195,6 +211,15 @@ export default function SurveyForm({ onClose, onNotification }) {
         return;
       }
       
+      // Process reasons to include "Other" specification if selected
+      let accessReasons = [...(currentData.accessReasons || [])];
+      if (isOtherSelected() && currentData.otherReason) {
+        // Replace "Other (please specify)" with the actual reason
+        accessReasons = accessReasons.map(reason => 
+          reason.startsWith('Other') ? `Other: ${currentData.otherReason}` : reason
+        );
+      }
+      
       // Submit to Supabase
       const { error } = await supabase
         .from('early_access_subscribers')
@@ -204,7 +229,7 @@ export default function SurveyForm({ onClose, onNotification }) {
             mobile: currentData.mobile || null,
             source: 'early-access-form',
             about_self: currentData.aboutSelf || '',
-            access_reason: currentData.accessReasons ? currentData.accessReasons.join(', ') : '',
+            access_reason: accessReasons.join(', '),
             reason_explanation: currentData.reasonExplanation || ''
           }
         ]);
@@ -256,41 +281,61 @@ export default function SurveyForm({ onClose, onNotification }) {
       case 'checkbox':
         if (key === 'accessReason') {
           return (
-            <div className="space-y-2">
-              {question.options.map((option, optionIndex) => {
-                const optionKey = `${key}-${optionIndex}`;
-                const isSelected = formData.accessReasons && formData.accessReasons.includes(option);
-                const isTouched = touchedInputs[key + option] || false;
-                const refKey = `checkbox|${key}|${option}`;
-                
-                return (
-                  <div 
-                    key={optionIndex} 
-                    className={`flex items-center ${isTouched ? 'bg-primary-900/60' : ''} ${isSelected ? 'bg-primary-800/40' : ''} transition-colors rounded p-2 mb-1 active:bg-primary-800/40`}
-                  >
-                    <input
-                      type="checkbox"
-                      id={optionKey}
-                      name={optionKey}
-                      ref={(el) => setInputRef(refKey, el)}
-                      className="w-5 h-5 text-primary-600 border-gray-600 focus:ring-primary-500 bg-gray-800 rounded"
-                      defaultChecked={isSelected}
-                      onChange={() => handleChange('checkbox', key, option)}
-                    />
-                    <label 
-                      htmlFor={optionKey} 
-                      className="ml-3 text-sm text-gray-300 flex-1 py-1"
-                      onClick={() => handleChange('checkbox', key, option)}
+            <>
+              <div className="space-y-2">
+                {question.options.map((option, optionIndex) => {
+                  const optionKey = `${key}-${optionIndex}`;
+                  const isSelected = formData.accessReasons && formData.accessReasons.includes(option);
+                  const isTouched = touchedInputs[key + option] || false;
+                  const refKey = `checkbox|${key}|${option}`;
+                  
+                  return (
+                    <div 
+                      key={optionIndex} 
+                      className={`flex items-center ${isTouched ? 'bg-primary-900/60' : ''} ${isSelected ? 'bg-primary-800/40' : ''} transition-colors rounded p-2 mb-1 active:bg-primary-800/40`}
                     >
-                      {option}
-                    </label>
-                  </div>
-                );
-              })}
-              {error && (
-                <p className="text-sm text-red-500 mt-1">{error}</p>
+                      <input
+                        type="checkbox"
+                        id={optionKey}
+                        name={optionKey}
+                        ref={(el) => setInputRef(refKey, el)}
+                        className="w-5 h-5 text-primary-600 border-gray-600 focus:ring-primary-500 bg-gray-800 rounded"
+                        defaultChecked={isSelected}
+                        onChange={() => handleChange('checkbox', key, option)}
+                      />
+                      <label 
+                        htmlFor={optionKey} 
+                        className="ml-3 text-sm text-gray-300 flex-1 py-1"
+                        onClick={() => handleChange('checkbox', key, option)}
+                      >
+                        {option}
+                      </label>
+                    </div>
+                  );
+                })}
+                {error && (
+                  <p className="text-sm text-red-500 mt-1">{error}</p>
+                )}
+              </div>
+
+              {/* Show text input if "Other" is selected */}
+              {isOtherSelected() && (
+                <div className="mt-3 ml-8">
+                  <input
+                    type="text"
+                    className={`w-full px-3 py-2 bg-gray-800 border ${errors.otherReason ? 'border-red-500' : 'border-gray-700'} rounded-md text-white placeholder-gray-500 focus:outline-none focus:border-primary-500 focus:ring-1 focus:ring-primary-500/50`}
+                    placeholder="Please specify your other reason..."
+                    defaultValue={formData.otherReason || ''}
+                    ref={(el) => setInputRef(`text|otherReason`, el)}
+                    autoComplete="off"
+                    onChange={() => handleChange('text', 'otherReason')}
+                  />
+                  {errors.otherReason && (
+                    <p className="text-sm text-red-500 mt-1">{errors.otherReason}</p>
+                  )}
+                </div>
               )}
-            </div>
+            </>
           );
         }
         return null;
