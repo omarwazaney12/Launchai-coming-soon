@@ -35,15 +35,6 @@ export default function JobApplicationForm({ position, onClose, onNotification }
   // Error state
   const [errors, setErrors] = useState({});
   
-  // Add debounce for mobile inputs
-  const debounce = (func, wait) => {
-    let timeout;
-    return (...args) => {
-      clearTimeout(timeout);
-      timeout = setTimeout(() => func(...args), wait);
-    };
-  };
-  
   // Optimize rendering for mobile
   useEffect(() => {
     // Add passive listeners to improve touch responsiveness
@@ -86,39 +77,14 @@ export default function JobApplicationForm({ position, onClose, onNotification }
     }, 300);
   };
   
-  // Handle input change with debouncing for text inputs
-  const handleDebouncedChange = useCallback(
-    debounce((name, value, type, checked) => {
-      if (type === 'checkbox' && name === 'terms') {
-        setFormData(prev => ({ ...prev, terms: checked }));
-      } else if (type === 'checkbox' && name.startsWith('skill-')) {
-        const skill = name.replace('skill-', '');
-        setFormData(prev => {
-          const newSkills = checked 
-            ? [...prev.skills, skill] 
-            : prev.skills.filter(s => s !== skill);
-          return { ...prev, skills: newSkills };
-        });
-      } else if (type === 'file') {
-        // File handling is handled separately
-      } else {
-        setFormData(prev => ({ ...prev, [name]: value }));
-      }
-    }, 100),
-    []
-  );
-  
-  // Handle immediate UI feedback then debounce the state update
+  // Handle immediate UI feedback and state update
   const handleChange = (e) => {
     const { name, value, type, checked } = e.target;
-    
-    // Give touch feedback for mobile
-    handleTouchFeedback(name);
     
     // Skip if scrolling to avoid accidental selections
     if (isScrolling && (type === 'checkbox' || type === 'radio')) return;
     
-    // Handle file uploads immediately (don't debounce)
+    // Handle file uploads immediately
     if (type === 'file') {
       if (e.target.files.length > 0) {
         setFormData(prev => ({ 
@@ -130,7 +96,7 @@ export default function JobApplicationForm({ position, onClose, onNotification }
       return;
     }
     
-    // FIXING THE TYPING ISSUE - immediately update form state for all inputs
+    // Update state immediately for all inputs
     if (type === 'checkbox' && name === 'terms') {
       setFormData(prev => ({ ...prev, terms: checked }));
     } else if (type === 'checkbox' && name.startsWith('skill-')) {
@@ -142,9 +108,12 @@ export default function JobApplicationForm({ position, onClose, onNotification }
         return { ...prev, skills: newSkills };
       });
     } else {
-      // Immediately update for text inputs - fixes the typing issue
+      // Immediately update for text inputs
       setFormData(prev => ({ ...prev, [name]: value }));
     }
+    
+    // Give touch feedback after state update
+    handleTouchFeedback(name);
   };
   
   // Validate current step
@@ -367,9 +336,10 @@ export default function JobApplicationForm({ position, onClose, onNotification }
           <textarea
             id={name}
             name={name}
-            value={value}
+            value={value || ''}
             placeholder={placeholder}
             onChange={onChange}
+            autoComplete="off"
             rows="4"
             className={`w-full p-3 bg-primary-800/70 border ${error ? 'border-red-500' : 'border-primary-700/50'} rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-primary-500 ${isTouched ? 'bg-primary-800' : ''}`}
           />
@@ -415,9 +385,10 @@ export default function JobApplicationForm({ position, onClose, onNotification }
             type={type}
             id={name}
             name={name}
-            value={value}
+            value={value || ''}
             placeholder={placeholder}
             onChange={onChange}
+            autoComplete="off"
             className={`w-full p-3 bg-primary-800/70 border ${error ? 'border-red-500' : 'border-primary-700/50'} rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-primary-500 ${isTouched ? 'bg-primary-800' : ''}`}
           />
         )}

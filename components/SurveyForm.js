@@ -8,15 +8,6 @@ export default function SurveyForm({ onClose, onNotification }) {
   const [touchedInputs, setTouchedInputs] = useState({});
   const [isScrolling, setIsScrolling] = useState(false);
   
-  // Add debounce for mobile inputs
-  const debounce = (func, wait) => {
-    let timeout;
-    return (...args) => {
-      clearTimeout(timeout);
-      timeout = setTimeout(() => func(...args), wait);
-    };
-  };
-  
   // Optimize rendering for mobile
   useEffect(() => {
     // Add passive listeners to improve touch responsiveness
@@ -59,13 +50,14 @@ export default function SurveyForm({ onClose, onNotification }) {
     }, 300);
   };
   
-  // Replace synchronous handler with debounced version for text inputs
-  const handleInputChange = useCallback(
-    (sectionIndex, questionIndex, value, isCheckbox = false) => {
-      const newFormData = { ...formData };
-      const section = surveyData.sections[sectionIndex];
-      const question = section.questions[questionIndex];
-      const key = `${section.title}-${question.label}`;
+  // Straightforward, non-debounced input handler
+  const handleInputChange = (sectionIndex, questionIndex, value, isCheckbox = false) => {
+    const section = surveyData.sections[sectionIndex];
+    const question = section.questions[questionIndex];
+    const key = `${section.title}-${question.label}`;
+    
+    setFormData(prev => {
+      const newFormData = { ...prev };
       
       if (isCheckbox) {
         if (!newFormData[key]) {
@@ -75,7 +67,7 @@ export default function SurveyForm({ onClose, onNotification }) {
         } else {
           // If there's a limit, check if we're at the limit
           if (question.limit && newFormData[key].length >= question.limit) {
-            return; // Don't add more if we're at the limit
+            return prev; // Don't add more if we're at the limit
           }
           newFormData[key] = [...newFormData[key], value];
         }
@@ -83,25 +75,24 @@ export default function SurveyForm({ onClose, onNotification }) {
         newFormData[key] = value;
       }
       
-      setFormData(newFormData);
-    },
-    [formData]
-  );
+      return newFormData;
+    });
+  };
   
-  // Use this for immediate feedback on checkboxes/radios
+  // Handle input changes with touch feedback
   const handleImmediateChange = (sectionIndex, questionIndex, value, isCheckbox = false) => {
+    // Skip if scrolling to avoid accidental selections
+    if (isScrolling) return;
+    
     const section = surveyData.sections[sectionIndex];
     const question = section.questions[questionIndex];
     const key = `${section.title}-${question.label}`;
     
-    // Give touch feedback
-    handleTouchFeedback(key + value);
-    
-    // Skip if scrolling to avoid accidental selections
-    if (isScrolling) return;
-    
-    // Direct call without debouncing - fixes the typing issue
+    // Handle the change
     handleInputChange(sectionIndex, questionIndex, value, isCheckbox);
+    
+    // Give touch feedback after state update
+    handleTouchFeedback(key + value);
   };
 
   const surveyData = {
@@ -452,7 +443,8 @@ export default function SurveyForm({ onClose, onNotification }) {
             rows="3"
             placeholder={question.placeholder}
             value={formData[key] || ''}
-            onChange={(e) => handleInputChange(sectionIndex, questionIndex, e.target.value)}
+            autoComplete="off"
+            onChange={(e) => handleImmediateChange(sectionIndex, questionIndex, e.target.value)}
           />
         );
       
@@ -463,7 +455,8 @@ export default function SurveyForm({ onClose, onNotification }) {
             className="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded-md text-white placeholder-gray-500 focus:outline-none focus:border-primary-500 focus:ring-1 focus:ring-primary-500/50"
             placeholder={question.placeholder}
             value={formData[key] || ''}
-            onChange={(e) => handleInputChange(sectionIndex, questionIndex, e.target.value)}
+            autoComplete="off" 
+            onChange={(e) => handleImmediateChange(sectionIndex, questionIndex, e.target.value)}
           />
         );
       
