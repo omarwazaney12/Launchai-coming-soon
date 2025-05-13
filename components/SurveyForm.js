@@ -61,7 +61,7 @@ export default function SurveyForm({ onClose, onNotification }) {
   
   // Replace synchronous handler with debounced version for text inputs
   const handleInputChange = useCallback(
-    debounce((sectionIndex, questionIndex, value, isCheckbox = false) => {
+    (sectionIndex, questionIndex, value, isCheckbox = false) => {
       const newFormData = { ...formData };
       const section = surveyData.sections[sectionIndex];
       const question = section.questions[questionIndex];
@@ -84,7 +84,7 @@ export default function SurveyForm({ onClose, onNotification }) {
       }
       
       setFormData(newFormData);
-    }, 100),
+    },
     [formData]
   );
   
@@ -100,7 +100,7 @@ export default function SurveyForm({ onClose, onNotification }) {
     // Skip if scrolling to avoid accidental selections
     if (isScrolling) return;
     
-    // Then call the debounced handler
+    // Direct call without debouncing - fixes the typing issue
     handleInputChange(sectionIndex, questionIndex, value, isCheckbox);
   };
 
