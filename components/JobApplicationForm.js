@@ -1,67 +1,98 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { supabase } from '../utils/supabase';
 import { FaFileUpload } from 'react-icons/fa/index.js';
 
 export default function JobApplicationForm({ position, onClose, onNotification }) {
   const [currentStep, setCurrentStep] = useState(1);
   const totalSteps = 4;
-  const [formData, setFormData] = useState({
-    position,
-    fullName: '',
-    email: '',
-    phone: '',
-    location: '',
-    currentPosition: '',
-    company: '',
-    experience: '',
-    experienceDetails: '',
-    education: '',
-    portfolio: '',
-    github: '',
-    linkedin: '',
-    resume: null,
-    resumeName: '',
-    startDate: '',
-    whyJoin: '',
-    skills: [],
-    terms: false
-  });
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errors, setErrors] = useState({});
   
-  // Basic form change handler - update state directly
-  const handleChange = (e) => {
-    const { name, value, type, checked, files } = e.target;
+  // Store form data that we'll collect only when needed (not on every keystroke)
+  const [formState, setFormState] = useState({
+    position,
+    skills: [],
+    terms: false
+  });
+  
+  // Create refs for form fields
+  const formRefs = useRef({
+    fullName: null,
+    email: null,
+    phone: null,
+    location: null,
+    currentPosition: null,
+    company: null,
+    experience: null,
+    experienceDetails: null,
+    education: null,
+    portfolio: null,
+    github: null,
+    linkedin: null,
+    startDate: null,
+    whyJoin: null,
+    resume: null,
+    resumeName: '',
+  });
+  
+  // Skills and checkbox handlers still need state updates
+  const handleSkillChange = (e) => {
+    const { name, checked } = e.target;
+    const skill = name.replace('skill-', '');
     
-    if (type === 'checkbox') {
-      if (name === 'terms') {
-        setFormData(prev => ({ ...prev, terms: checked }));
-      } else if (name.startsWith('skill-')) {
-        const skill = name.replace('skill-', '');
-        setFormData(prev => {
-          const newSkills = checked 
-            ? [...prev.skills, skill] 
-            : prev.skills.filter(s => s !== skill);
-          return { ...prev, skills: newSkills };
-        });
-      }
-    } else if (type === 'file') {
-      if (files && files.length > 0) {
-        setFormData(prev => ({
-          ...prev,
-          resume: files[0],
-          resumeName: files[0].name
-        }));
-      }
-    } else {
-      setFormData(prev => ({ ...prev, [name]: value }));
+    setFormState(prev => {
+      const newSkills = checked 
+        ? [...prev.skills, skill] 
+        : prev.skills.filter(s => s !== skill);
+      return { ...prev, skills: newSkills };
+    });
+  };
+  
+  const handleTermsChange = (e) => {
+    setFormState(prev => ({ 
+      ...prev, 
+      terms: e.target.checked
+    }));
+  };
+  
+  // File upload handler
+  const handleFileChange = (e) => {
+    if (e.target.files && e.target.files.length > 0) {
+      const file = e.target.files[0];
+      formRefs.current.resume = file;
+      formRefs.current.resumeName = file.name;
     }
+  };
+  
+  // Collect all form data at once (only when submitting or changing steps)
+  const collectFormData = () => {
+    const data = {
+      ...formState,
+      fullName: formRefs.current.fullName?.value || '',
+      email: formRefs.current.email?.value || '',
+      phone: formRefs.current.phone?.value || '',
+      location: formRefs.current.location?.value || '',
+      currentPosition: formRefs.current.currentPosition?.value || '',
+      company: formRefs.current.company?.value || '',
+      experience: formRefs.current.experience?.value || '',
+      experienceDetails: formRefs.current.experienceDetails?.value || '',
+      education: formRefs.current.education?.value || '',
+      portfolio: formRefs.current.portfolio?.value || '',
+      github: formRefs.current.github?.value || '',
+      linkedin: formRefs.current.linkedin?.value || '',
+      startDate: formRefs.current.startDate?.value || '',
+      whyJoin: formRefs.current.whyJoin?.value || '',
+      resume: formRefs.current.resume,
+      resumeName: formRefs.current.resumeName,
+    };
+    return data;
   };
 
   // Validate current step
   const validateStep = (step) => {
     let isValid = true;
     const newErrors = {};
+    const formData = collectFormData();
     
     switch(step) {
       case 1:
@@ -157,6 +188,8 @@ export default function JobApplicationForm({ position, onClose, onNotification }
   // Handle next step
   const nextStep = () => {
     if (validateStep(currentStep)) {
+      // Update formState with current values before changing step
+      setFormState(collectFormData());
       setCurrentStep(prev => Math.min(prev + 1, totalSteps));
       // Scroll to top when changing steps
       setTimeout(() => {
@@ -185,6 +218,7 @@ export default function JobApplicationForm({ position, onClose, onNotification }
     }
     
     setIsSubmitting(true);
+    const formData = collectFormData();
     
     try {
       // First, upload the resume to Supabase Storage
@@ -245,9 +279,12 @@ export default function JobApplicationForm({ position, onClose, onNotification }
     }
   };
 
-  // Basic input component
-  const FormInput = ({ label, name, type = 'text', value = '', placeholder = '', required = false, options = [] }) => {
+  // Basic uncontrolled input component
+  const FormInput = ({ label, name, type = 'text', defaultValue = '', placeholder = '', required = false, options = [] }) => {
     const error = errors[name];
+    const inputRef = (element) => {
+      if (element) formRefs.current[name] = element;
+    };
     
     return (
       <div className="mb-4">
@@ -262,8 +299,8 @@ export default function JobApplicationForm({ position, onClose, onNotification }
           <select
             id={name}
             name={name}
-            value={value}
-            onChange={handleChange}
+            ref={inputRef}
+            defaultValue={formState[name] || defaultValue}
             className={`w-full p-3 bg-primary-800/70 border ${error ? 'border-red-500' : 'border-primary-700/50'} rounded-lg text-white focus:outline-none focus:border-primary-500`}
           >
             <option value="">Select an option</option>
@@ -277,9 +314,9 @@ export default function JobApplicationForm({ position, onClose, onNotification }
           <textarea
             id={name}
             name={name}
-            value={value}
+            ref={inputRef}
+            defaultValue={formState[name] || defaultValue}
             placeholder={placeholder}
-            onChange={handleChange}
             rows="4"
             className={`w-full p-3 bg-primary-800/70 border ${error ? 'border-red-500' : 'border-primary-700/50'} rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-primary-500`}
           />
@@ -291,13 +328,13 @@ export default function JobApplicationForm({ position, onClose, onNotification }
             >
               <FaFileUpload className="text-3xl text-primary-500 mb-2" />
               <span className="text-sm font-medium text-gray-300">
-                {formData.resumeName ? formData.resumeName : 'Select your resume'}
+                {formRefs.current.resumeName || 'Select your resume'}
               </span>
               <input
                 type="file"
                 id={name}
                 name={name}
-                onChange={handleChange}
+                onChange={handleFileChange}
                 accept=".pdf,.doc,.docx"
                 className="hidden"
               />
@@ -309,8 +346,8 @@ export default function JobApplicationForm({ position, onClose, onNotification }
               type="checkbox"
               id={name}
               name={name}
-              checked={value}
-              onChange={handleChange}
+              checked={formState.terms}
+              onChange={handleTermsChange}
               className="w-5 h-5 text-primary-600 border-gray-700 rounded bg-primary-900 focus:ring-primary-500"
             />
             <label 
@@ -325,9 +362,9 @@ export default function JobApplicationForm({ position, onClose, onNotification }
             type={type}
             id={name}
             name={name}
-            value={value}
+            ref={inputRef}
+            defaultValue={formState[name] || defaultValue}
             placeholder={placeholder}
-            onChange={handleChange}
             className={`w-full p-3 bg-primary-800/70 border ${error ? 'border-red-500' : 'border-primary-700/50'} rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-primary-500`}
           />
         )}
@@ -350,7 +387,7 @@ export default function JobApplicationForm({ position, onClose, onNotification }
           id={name}
           name={name}
           checked={isSelected}
-          onChange={handleChange}
+          onChange={handleSkillChange}
           className="w-5 h-5 text-primary-600 border-gray-700 rounded bg-primary-900 focus:ring-primary-500"
         />
         <label 
@@ -405,7 +442,6 @@ export default function JobApplicationForm({ position, onClose, onNotification }
                 <FormInput
                   label="Full Name"
                   name="fullName"
-                  value={formData.fullName}
                   placeholder="Enter your full name"
                   required
                 />
@@ -414,7 +450,6 @@ export default function JobApplicationForm({ position, onClose, onNotification }
                   label="Email"
                   name="email"
                   type="email"
-                  value={formData.email}
                   placeholder="Enter your email address"
                   required
                 />
@@ -423,7 +458,6 @@ export default function JobApplicationForm({ position, onClose, onNotification }
                   label="Phone Number"
                   name="phone"
                   type="tel"
-                  value={formData.phone}
                   placeholder="Enter your phone number"
                   required
                 />
@@ -431,7 +465,6 @@ export default function JobApplicationForm({ position, onClose, onNotification }
                 <FormInput
                   label="Location"
                   name="location"
-                  value={formData.location}
                   placeholder="City, Country"
                   required
                 />
@@ -446,7 +479,6 @@ export default function JobApplicationForm({ position, onClose, onNotification }
                 <FormInput
                   label="Current Position"
                   name="currentPosition"
-                  value={formData.currentPosition}
                   placeholder="Your current job title"
                   required
                 />
@@ -454,7 +486,6 @@ export default function JobApplicationForm({ position, onClose, onNotification }
                 <FormInput
                   label="Company"
                   name="company"
-                  value={formData.company}
                   placeholder="Your current company"
                   required
                 />
@@ -463,7 +494,6 @@ export default function JobApplicationForm({ position, onClose, onNotification }
                   label="Years of Experience"
                   name="experience"
                   type="select"
-                  value={formData.experience}
                   required
                   options={[
                     { value: '0-1', label: 'Less than 1 year' },
@@ -478,7 +508,6 @@ export default function JobApplicationForm({ position, onClose, onNotification }
                   label="Relevant Experience Details"
                   name="experienceDetails"
                   type="textarea"
-                  value={formData.experienceDetails}
                   placeholder="Brief description of your relevant experience..."
                   required
                 />
@@ -494,7 +523,6 @@ export default function JobApplicationForm({ position, onClose, onNotification }
                   label="Highest Education Level"
                   name="education"
                   type="select"
-                  value={formData.education}
                   required
                   options={[
                     { value: 'high-school', label: 'High School' },
@@ -515,27 +543,27 @@ export default function JobApplicationForm({ position, onClose, onNotification }
                       <>
                         <SkillCheckbox 
                           skill="Leadership" 
-                          isSelected={formData.skills.includes('Leadership')}
+                          isSelected={formState.skills.includes('Leadership')}
                         />
                         <SkillCheckbox 
                           skill="AI/ML" 
-                          isSelected={formData.skills.includes('AI/ML')}
+                          isSelected={formState.skills.includes('AI/ML')}
                         />
                         <SkillCheckbox 
                           skill="Cloud Architecture" 
-                          isSelected={formData.skills.includes('Cloud Architecture')}
+                          isSelected={formState.skills.includes('Cloud Architecture')}
                         />
                         <SkillCheckbox 
                           skill="System Design" 
-                          isSelected={formData.skills.includes('System Design')}
+                          isSelected={formState.skills.includes('System Design')}
                         />
                         <SkillCheckbox 
                           skill="Team Management" 
-                          isSelected={formData.skills.includes('Team Management')}
+                          isSelected={formState.skills.includes('Team Management')}
                         />
                         <SkillCheckbox 
                           skill="Product Strategy" 
-                          isSelected={formData.skills.includes('Product Strategy')}
+                          isSelected={formState.skills.includes('Product Strategy')}
                         />
                       </>
                     )}
@@ -544,27 +572,27 @@ export default function JobApplicationForm({ position, onClose, onNotification }
                       <>
                         <SkillCheckbox 
                           skill="React" 
-                          isSelected={formData.skills.includes('React')}
+                          isSelected={formState.skills.includes('React')}
                         />
                         <SkillCheckbox 
                           skill="Next.js" 
-                          isSelected={formData.skills.includes('Next.js')}
+                          isSelected={formState.skills.includes('Next.js')}
                         />
                         <SkillCheckbox 
                           skill="Node.js" 
-                          isSelected={formData.skills.includes('Node.js')}
+                          isSelected={formState.skills.includes('Node.js')}
                         />
                         <SkillCheckbox 
                           skill="TypeScript" 
-                          isSelected={formData.skills.includes('TypeScript')}
+                          isSelected={formState.skills.includes('TypeScript')}
                         />
                         <SkillCheckbox 
                           skill="Database Design" 
-                          isSelected={formData.skills.includes('Database Design')}
+                          isSelected={formState.skills.includes('Database Design')}
                         />
                         <SkillCheckbox 
                           skill="API Development" 
-                          isSelected={formData.skills.includes('API Development')}
+                          isSelected={formState.skills.includes('API Development')}
                         />
                       </>
                     )}
@@ -573,27 +601,27 @@ export default function JobApplicationForm({ position, onClose, onNotification }
                       <>
                         <SkillCheckbox 
                           skill="Machine Learning" 
-                          isSelected={formData.skills.includes('Machine Learning')}
+                          isSelected={formState.skills.includes('Machine Learning')}
                         />
                         <SkillCheckbox 
                           skill="NLP" 
-                          isSelected={formData.skills.includes('NLP')}
+                          isSelected={formState.skills.includes('NLP')}
                         />
                         <SkillCheckbox 
                           skill="Python" 
-                          isSelected={formData.skills.includes('Python')}
+                          isSelected={formState.skills.includes('Python')}
                         />
                         <SkillCheckbox 
                           skill="LLM Fine-Tuning" 
-                          isSelected={formData.skills.includes('LLM Fine-Tuning')}
+                          isSelected={formState.skills.includes('LLM Fine-Tuning')}
                         />
                         <SkillCheckbox 
                           skill="TensorFlow/PyTorch" 
-                          isSelected={formData.skills.includes('TensorFlow/PyTorch')}
+                          isSelected={formState.skills.includes('TensorFlow/PyTorch')}
                         />
                         <SkillCheckbox 
                           skill="Data Science" 
-                          isSelected={formData.skills.includes('Data Science')}
+                          isSelected={formState.skills.includes('Data Science')}
                         />
                       </>
                     )}
@@ -606,21 +634,18 @@ export default function JobApplicationForm({ position, onClose, onNotification }
                 <FormInput
                   label="Portfolio URL"
                   name="portfolio"
-                  value={formData.portfolio}
                   placeholder="https://yourportfolio.com"
                 />
                 
                 <FormInput
                   label="GitHub URL"
                   name="github"
-                  value={formData.github}
                   placeholder="https://github.com/username"
                 />
                 
                 <FormInput
                   label="LinkedIn URL"
                   name="linkedin"
-                  value={formData.linkedin}
                   placeholder="https://linkedin.com/in/username"
                 />
               </div>
@@ -642,7 +667,6 @@ export default function JobApplicationForm({ position, onClose, onNotification }
                   label="Earliest Start Date"
                   name="startDate"
                   type="select"
-                  value={formData.startDate}
                   required
                   options={[
                     { value: 'immediately', label: 'Immediately' },
@@ -656,7 +680,6 @@ export default function JobApplicationForm({ position, onClose, onNotification }
                   label="Why do you want to join LaunchAI?"
                   name="whyJoin"
                   type="textarea"
-                  value={formData.whyJoin}
                   placeholder="Tell us why you're interested in this position and what you can bring to the team..."
                   required
                 />
@@ -665,7 +688,6 @@ export default function JobApplicationForm({ position, onClose, onNotification }
                   label=""
                   name="terms"
                   type="checkbox"
-                  value={formData.terms}
                   required
                 />
               </div>
