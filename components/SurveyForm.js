@@ -6,6 +6,7 @@ export default function SurveyForm({ onClose, onNotification }) {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [touchedInputs, setTouchedInputs] = useState({});
   const [isScrolling, setIsScrolling] = useState(false);
+  const [errors, setErrors] = useState({});
   
   // Store refs to form elements
   const formRefs = useRef({});
@@ -84,6 +85,15 @@ export default function SurveyForm({ onClose, onNotification }) {
     
     // Give touch feedback
     handleTouchFeedback(fieldName + (value || ''));
+    
+    // Clear error for this field when user makes changes
+    if (errors[fieldName]) {
+      setErrors(prev => {
+        const newErrors = {...prev};
+        delete newErrors[fieldName];
+        return newErrors;
+      });
+    }
   };
 
   // Simplified survey data structure
@@ -93,12 +103,14 @@ export default function SurveyForm({ onClose, onNotification }) {
       {
         type: "textarea",
         name: "aboutSelf",
-        label: "Tell us briefly about yourself and what you're working on right now."
+        label: "Tell us briefly about yourself and what you're working on right now.",
+        required: true
       },
       {
         type: "radio",
         name: "accessReason",
         label: "What's your main reason for wanting early access to LaunchAI?",
+        required: true,
         options: [
           "I need help validating my startup idea (market research, competitors, customer validation)",
           "I'm struggling with finances and business model planning",
@@ -113,22 +125,50 @@ export default function SurveyForm({ onClose, onNotification }) {
       {
         type: "textarea",
         name: "reasonExplanation",
-        label: "Why did you choose this reason?"
+        label: "Why did you choose this reason?",
+        required: true
       },
       {
         type: "email",
         name: "email",
         label: "Your Email",
-        placeholder: "email@example.com"
+        placeholder: "email@example.com",
+        required: true
       },
       {
         type: "text",
         name: "mobile",
         label: "Your Mobile Number",
-        placeholder: "+1234567890"
+        placeholder: "+1234567890",
+        required: true
       }
     ],
     submitButton: "Request Early Access"
+  };
+
+  // Validate the form data
+  const validateForm = (data) => {
+    const newErrors = {};
+    
+    // Check each required field
+    surveyData.questions.forEach(question => {
+      if (question.required) {
+        if (question.type === 'radio' && !data[question.name]) {
+          newErrors[question.name] = `Please select an option`;
+        } 
+        else if (!data[question.name] || !data[question.name].trim()) {
+          newErrors[question.name] = `This field is required`;
+        }
+      }
+    });
+    
+    // Special validation for email
+    if (data.email && !validateEmail(data.email)) {
+      newErrors.email = 'Please enter a valid email address';
+    }
+    
+    setErrors(newErrors);
+    return Object.keys(newErrors).length === 0;
   };
 
   const handleSubmit = async () => {
@@ -139,13 +179,10 @@ export default function SurveyForm({ onClose, onNotification }) {
       const currentData = collectFormData();
       setFormData(currentData);
       
-      // Validate required fields
-      if (!currentData.email) {
-        throw new Error('Email is required');
-      }
-      
-      if (!validateEmail(currentData.email)) {
-        throw new Error('Please enter a valid email address');
+      // Validate all required fields
+      if (!validateForm(currentData)) {
+        setIsSubmitting(false);
+        return;
       }
       
       // Submit to Supabase
@@ -156,12 +193,9 @@ export default function SurveyForm({ onClose, onNotification }) {
             email: currentData.email,
             mobile: currentData.mobile || null,
             source: 'early-access-form',
-            survey_data: {
-              about_self: currentData.aboutSelf || '',
-              access_reason: currentData.accessReason || '',
-              reason_explanation: currentData.reasonExplanation || ''
-            },
-            user_agent: navigator.userAgent
+            about_self: currentData.aboutSelf || '',
+            access_reason: currentData.accessReason || '',
+            reason_explanation: currentData.reasonExplanation || ''
           }
         ]);
       
@@ -192,7 +226,7 @@ export default function SurveyForm({ onClose, onNotification }) {
   // Check if form is complete enough to submit
   const isFormComplete = () => {
     const currentData = collectFormData();
-    return currentData.email && validateEmail(currentData.email);
+    return validateForm(currentData);
   };
   
   // Set up refs for input elements
@@ -206,6 +240,7 @@ export default function SurveyForm({ onClose, onNotification }) {
   const renderInput = (question) => {
     const key = question.name;
     const value = formData[key] || '';
+    const error = errors[key];
     
     switch (question.type) {
       case 'radio':
@@ -220,7 +255,7 @@ export default function SurveyForm({ onClose, onNotification }) {
               return (
                 <div 
                   key={optionIndex} 
-                  className={`flex items-center ${isTouched ? 'bg-primary-900/60' : ''} transition-colors rounded p-2 mb-1 active:bg-primary-800/40`}
+                  className={`flex items-center ${isTouched ? 'bg-primary-900/60' : ''} ${isSelected ? 'bg-primary-800/40' : ''} transition-colors rounded p-2 mb-1 active:bg-primary-800/40`}
                 >
                   <input
                     type="radio"
@@ -241,47 +276,65 @@ export default function SurveyForm({ onClose, onNotification }) {
                 </div>
               );
             })}
+            {error && (
+              <p className="text-sm text-red-500 mt-1">{error}</p>
+            )}
           </div>
         );
       
       case 'textarea':
         return (
-          <textarea
-            className="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded-md text-white placeholder-gray-500 focus:outline-none focus:border-primary-500 focus:ring-1 focus:ring-primary-500/50"
-            rows="3"
-            placeholder={question.placeholder || "Your answer..."}
-            defaultValue={value}
-            ref={(el) => setInputRef(`textarea|${key}`, el)}
-            autoComplete="off"
-            onChange={() => handleChange('textarea', key)}
-          />
+          <>
+            <textarea
+              className={`w-full px-3 py-2 bg-gray-800 border ${error ? 'border-red-500' : 'border-gray-700'} rounded-md text-white placeholder-gray-500 focus:outline-none focus:border-primary-500 focus:ring-1 focus:ring-primary-500/50`}
+              rows="3"
+              placeholder={question.placeholder || "Your answer..."}
+              defaultValue={value}
+              ref={(el) => setInputRef(`textarea|${key}`, el)}
+              autoComplete="off"
+              onChange={() => handleChange('textarea', key)}
+            />
+            {error && (
+              <p className="text-sm text-red-500 mt-1">{error}</p>
+            )}
+          </>
         );
       
       case 'email':
         return (
-          <input
-            type="email"
-            className="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded-md text-white placeholder-gray-500 focus:outline-none focus:border-primary-500 focus:ring-1 focus:ring-primary-500/50"
-            placeholder={question.placeholder || "your@email.com"}
-            defaultValue={value}
-            ref={(el) => setInputRef(`email|${key}`, el)}
-            autoComplete="off"
-            onChange={() => handleChange('email', key)}
-          />
+          <>
+            <input
+              type="email"
+              className={`w-full px-3 py-2 bg-gray-800 border ${error ? 'border-red-500' : 'border-gray-700'} rounded-md text-white placeholder-gray-500 focus:outline-none focus:border-primary-500 focus:ring-1 focus:ring-primary-500/50`}
+              placeholder={question.placeholder || "your@email.com"}
+              defaultValue={value}
+              ref={(el) => setInputRef(`email|${key}`, el)}
+              autoComplete="off"
+              onChange={() => handleChange('email', key)}
+            />
+            {error && (
+              <p className="text-sm text-red-500 mt-1">{error}</p>
+            )}
+          </>
         );
       
       case 'text':
       default:
         return (
-          <input
-            type="text"
-            className="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded-md text-white placeholder-gray-500 focus:outline-none focus:border-primary-500 focus:ring-1 focus:ring-primary-500/50"
-            placeholder={question.placeholder || ""}
-            defaultValue={value}
-            ref={(el) => setInputRef(`text|${key}`, el)}
-            autoComplete="off"
-            onChange={() => handleChange('text', key)}
-          />
+          <>
+            <input
+              type="text"
+              className={`w-full px-3 py-2 bg-gray-800 border ${error ? 'border-red-500' : 'border-gray-700'} rounded-md text-white placeholder-gray-500 focus:outline-none focus:border-primary-500 focus:ring-1 focus:ring-primary-500/50`}
+              placeholder={question.placeholder || ""}
+              defaultValue={value}
+              ref={(el) => setInputRef(`text|${key}`, el)}
+              autoComplete="off"
+              onChange={() => handleChange('text', key)}
+            />
+            {error && (
+              <p className="text-sm text-red-500 mt-1">{error}</p>
+            )}
+          </>
         );
     }
   };
@@ -315,7 +368,10 @@ export default function SurveyForm({ onClose, onNotification }) {
             <div className="space-y-6">
               {surveyData.questions.map((question, questionIndex) => (
                 <div key={questionIndex} className="space-y-2">
-                  <label className="block text-white font-medium">{question.label}</label>
+                  <label className="block text-white font-medium">
+                    {question.label} 
+                    {question.required && <span className="text-red-500 ml-1">*</span>}
+                  </label>
                   {renderInput(question)}
                 </div>
               ))}
@@ -326,8 +382,8 @@ export default function SurveyForm({ onClose, onNotification }) {
           <div className="flex justify-end mt-8">
             <button 
               onClick={handleSubmit} 
-              disabled={isSubmitting || !isFormComplete()}
-              className={`px-6 py-3 rounded-lg ${isSubmitting || !isFormComplete() ? 
+              disabled={isSubmitting}
+              className={`px-6 py-3 rounded-lg ${isSubmitting ? 
                 'bg-gray-700 text-gray-400 cursor-not-allowed' : 
                 'bg-gradient-to-r from-primary-600 to-primary-800 text-white hover:from-primary-500 hover:to-primary-700 active:scale-95 transform transition-transform'}`}
             >
