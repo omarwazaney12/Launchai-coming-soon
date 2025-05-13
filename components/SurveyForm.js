@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import { supabase } from '../utils/supabase';
 
 export default function SurveyForm({ onClose, onNotification }) {
@@ -7,6 +7,9 @@ export default function SurveyForm({ onClose, onNotification }) {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [touchedInputs, setTouchedInputs] = useState({});
   const [isScrolling, setIsScrolling] = useState(false);
+  
+  // Store refs to form elements
+  const formRefs = useRef({});
   
   // Optimize rendering for mobile
   useEffect(() => {
@@ -50,37 +53,49 @@ export default function SurveyForm({ onClose, onNotification }) {
     }, 300);
   };
   
-  // Straightforward, non-debounced input handler
-  const handleInputChange = (sectionIndex, questionIndex, value, isCheckbox = false) => {
-    const section = surveyData.sections[sectionIndex];
-    const question = section.questions[questionIndex];
-    const key = `${section.title}-${question.label}`;
+  // Get all current input values when needed
+  const collectFormData = () => {
+    const newData = { ...formData };
     
-    setFormData(prev => {
-      const newFormData = { ...prev };
+    Object.keys(formRefs.current).forEach(refKey => {
+      const element = formRefs.current[refKey];
+      if (!element) return;
       
-      if (isCheckbox) {
-        if (!newFormData[key]) {
-          newFormData[key] = [value];
-        } else if (newFormData[key].includes(value)) {
-          newFormData[key] = newFormData[key].filter(item => item !== value);
-        } else {
-          // If there's a limit, check if we're at the limit
-          if (question.limit && newFormData[key].length >= question.limit) {
-            return prev; // Don't add more if we're at the limit
+      // Split the refKey to get section, question, and option info
+      const [type, sectionIndex, questionIndex, optionValue] = refKey.split('|');
+      
+      if (!type || sectionIndex === undefined || questionIndex === undefined) return;
+      
+      const section = surveyData.sections[parseInt(sectionIndex)];
+      const question = section?.questions[parseInt(questionIndex)];
+      
+      if (!section || !question) return;
+      
+      const key = `${section.title}-${question.label}`;
+      
+      if (type === 'checkbox') {
+        if (element.checked) {
+          if (!newData[key]) newData[key] = [];
+          if (!newData[key].includes(optionValue)) {
+            newData[key] = [...(newData[key] || []), optionValue];
           }
-          newFormData[key] = [...newFormData[key], value];
+        } else if (newData[key]) {
+          newData[key] = newData[key].filter(item => item !== optionValue);
         }
-      } else {
-        newFormData[key] = value;
+      } else if (type === 'radio') {
+        if (element.checked) {
+          newData[key] = optionValue;
+        }
+      } else if (type === 'text' || type === 'textarea') {
+        newData[key] = element.value;
       }
-      
-      return newFormData;
     });
+    
+    return newData;
   };
   
-  // Handle input changes with touch feedback
-  const handleImmediateChange = (sectionIndex, questionIndex, value, isCheckbox = false) => {
+  // Handle checkbox and radio changes
+  const handleChange = (type, sectionIndex, questionIndex, value = null) => {
     // Skip if scrolling to avoid accidental selections
     if (isScrolling) return;
     
@@ -88,11 +103,11 @@ export default function SurveyForm({ onClose, onNotification }) {
     const question = section.questions[questionIndex];
     const key = `${section.title}-${question.label}`;
     
-    // Handle the change
-    handleInputChange(sectionIndex, questionIndex, value, isCheckbox);
+    // Give touch feedback
+    handleTouchFeedback(key + (value || ''));
     
-    // Give touch feedback after state update
-    handleTouchFeedback(key + value);
+    // No need to update state immediately for input fields
+    // We'll collect all the data when needed (submission or navigation)
   };
 
   const surveyData = {
@@ -298,9 +313,13 @@ export default function SurveyForm({ onClose, onNotification }) {
     setIsSubmitting(true);
     
     try {
+      // Collect all form data before submission
+      const currentData = collectFormData();
+      setFormData(currentData);
+      
       // Get the email from the form data
       const emailKey = `${surveyData.sections[5].title}-${surveyData.sections[5].questions[0].label}`;
-      const email = formData[emailKey] || '';
+      const email = currentData[emailKey] || '';
       
       // Submit to Supabase
       const { error } = await supabase
@@ -309,7 +328,7 @@ export default function SurveyForm({ onClose, onNotification }) {
           { 
             email,
             source: 'survey-form',
-            survey_data: formData,
+            survey_data: currentData,
             ip_address: '',
             user_agent: navigator.userAgent
           }
@@ -336,6 +355,9 @@ export default function SurveyForm({ onClose, onNotification }) {
 
   const nextSection = () => {
     if (currentSection < surveyData.sections.length - 1) {
+      // Collect data before moving to next section
+      const currentData = collectFormData();
+      setFormData(currentData);
       setCurrentSection(currentSection + 1);
     }
   };
@@ -353,10 +375,19 @@ export default function SurveyForm({ onClose, onNotification }) {
   const isFinalSectionComplete = () => {
     if (!isLastSection) return true;
     
+    const currentData = collectFormData();
     const emailKey = `${surveyData.sections[5].title}-${surveyData.sections[5].questions[0].label}`;
-    const email = formData[emailKey] || '';
+    const email = currentData[emailKey] || '';
     
     return email && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+  };
+  
+  // Set up refs for input elements
+  const setInputRef = (refKey, element) => {
+    if (element && !element.dataset.refSet) {
+      formRefs.current[refKey] = element;
+      element.dataset.refSet = true;
+    }
   };
 
   const renderInput = (question, sectionIndex, questionIndex) => {
@@ -370,6 +401,7 @@ export default function SurveyForm({ onClose, onNotification }) {
               const optionKey = `${key}-${optionIndex}`;
               const isSelected = formData[key]?.includes(option) || false;
               const isTouched = touchedInputs[key + option] || false;
+              const refKey = `checkbox|${sectionIndex}|${questionIndex}|${option}`;
               
               return (
                 <div 
@@ -379,14 +411,15 @@ export default function SurveyForm({ onClose, onNotification }) {
                   <input
                     type="checkbox"
                     id={optionKey}
+                    ref={(el) => setInputRef(refKey, el)}
                     className="w-5 h-5 text-primary-600 border-gray-600 rounded focus:ring-primary-500 bg-gray-800"
-                    checked={isSelected}
-                    onChange={() => handleImmediateChange(sectionIndex, questionIndex, option, true)}
+                    defaultChecked={isSelected}
+                    onChange={() => handleChange('checkbox', sectionIndex, questionIndex, option)}
                   />
                   <label 
                     htmlFor={optionKey} 
                     className="ml-3 text-sm text-gray-300 flex-1 py-1"
-                    onClick={() => handleImmediateChange(sectionIndex, questionIndex, option, true)}
+                    onClick={() => handleChange('checkbox', sectionIndex, questionIndex, option)}
                   >
                     {option}
                   </label>
@@ -409,6 +442,7 @@ export default function SurveyForm({ onClose, onNotification }) {
               const optionKey = `${key}-${optionIndex}`;
               const isSelected = formData[key] === option;
               const isTouched = touchedInputs[key + option] || false;
+              const refKey = `radio|${sectionIndex}|${questionIndex}|${option}`;
               
               return (
                 <div 
@@ -419,14 +453,15 @@ export default function SurveyForm({ onClose, onNotification }) {
                     type="radio"
                     id={optionKey}
                     name={key}
+                    ref={(el) => setInputRef(refKey, el)}
                     className="w-5 h-5 text-primary-600 border-gray-600 focus:ring-primary-500 bg-gray-800"
-                    checked={isSelected}
-                    onChange={() => handleImmediateChange(sectionIndex, questionIndex, option)}
+                    defaultChecked={isSelected}
+                    onChange={() => handleChange('radio', sectionIndex, questionIndex, option)}
                   />
                   <label 
                     htmlFor={optionKey} 
                     className="ml-3 text-sm text-gray-300 flex-1 py-1"
-                    onClick={() => handleImmediateChange(sectionIndex, questionIndex, option)}
+                    onClick={() => handleChange('radio', sectionIndex, questionIndex, option)}
                   >
                     {option}
                   </label>
@@ -442,10 +477,10 @@ export default function SurveyForm({ onClose, onNotification }) {
             className="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded-md text-white placeholder-gray-500 focus:outline-none focus:border-primary-500 focus:ring-1 focus:ring-primary-500/50"
             rows="3"
             placeholder={question.placeholder}
-            value={formData[key] || ''}
+            defaultValue={formData[key] || ''}
+            ref={(el) => setInputRef(`textarea|${sectionIndex}|${questionIndex}`, el)}
             autoComplete="off"
-            key={`textarea-${key}`}
-            onChange={(e) => handleImmediateChange(sectionIndex, questionIndex, e.target.value)}
+            onChange={() => handleChange('textarea', sectionIndex, questionIndex)}
           />
         );
       
@@ -455,10 +490,10 @@ export default function SurveyForm({ onClose, onNotification }) {
             type="text"
             className="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded-md text-white placeholder-gray-500 focus:outline-none focus:border-primary-500 focus:ring-1 focus:ring-primary-500/50"
             placeholder={question.placeholder}
-            value={formData[key] || ''}
+            defaultValue={formData[key] || ''}
+            ref={(el) => setInputRef(`text|${sectionIndex}|${questionIndex}`, el)}
             autoComplete="off"
-            key={`input-${key}`}
-            onChange={(e) => handleImmediateChange(sectionIndex, questionIndex, e.target.value)}
+            onChange={() => handleChange('text', sectionIndex, questionIndex)}
           />
         );
       
@@ -466,6 +501,13 @@ export default function SurveyForm({ onClose, onNotification }) {
         return null;
     }
   };
+  
+  // Reset form refs when component unmounts
+  useEffect(() => {
+    return () => {
+      formRefs.current = {};
+    };
+  }, []);
 
   return (
     <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex justify-center items-start p-4 overflow-y-auto">
