@@ -81,25 +81,24 @@ export default function JobApplicationForm({ position, onClose, onNotification }
   };
   
   // Handle immediate UI feedback and state update
-  const handleChange = (e) => {
-    const { name, type, checked } = e.target;
-    
+  const handleChange = (type, name, checked = false) => {
     // Skip if scrolling to avoid accidental selections
     if (isScrolling && (type === 'checkbox' || type === 'radio')) return;
     
-    // Handle file uploads immediately
+    // For file uploads, we need to capture the file data differently
     if (type === 'file') {
-      if (e.target.files.length > 0) {
+      const element = formRefs.current[`file|${name}`];
+      if (element && element.files && element.files.length > 0) {
         setFormData(prev => ({ 
           ...prev, 
-          resume: e.target.files[0],
-          resumeName: e.target.files[0].name
+          resume: element.files[0],
+          resumeName: element.files[0].name
         }));
       }
       return;
     }
     
-    // Only update state for checkboxes, we'll handle text inputs at form submission
+    // Only update state for checkboxes immediately
     if (type === 'checkbox' && name === 'terms') {
       setFormData(prev => ({ ...prev, terms: checked }));
     } else if (type === 'checkbox' && name.startsWith('skill-')) {
@@ -116,18 +115,35 @@ export default function JobApplicationForm({ position, onClose, onNotification }
     handleTouchFeedback(name);
   };
 
+  // Set up refs for input elements - similar to SurveyForm's approach
+  const setInputRef = (refKey, element) => {
+    if (element && !element.dataset.refSet) {
+      formRefs.current[refKey] = element;
+      element.dataset.refSet = true;
+    }
+  };
+
   // Get all current input values when needed
   const collectFormData = () => {
     const collectedData = { ...formData };
     
     // Loop through all refs and get their current values
-    Object.keys(formRefs.current).forEach(name => {
-      const element = formRefs.current[name];
+    Object.keys(formRefs.current).forEach(refKey => {
+      const element = formRefs.current[refKey];
       if (!element) return;
       
-      if (element.type === 'checkbox') {
-        collectedData[name] = element.checked;
-      } else if (element.type !== 'file') {
+      // Split the refKey to get input type and name
+      const [type, name] = refKey.split('|');
+      
+      if (type === 'checkbox') {
+        if (name === 'terms') {
+          collectedData.terms = element.checked;
+        } else if (name.startsWith('skill-')) {
+          // Skills are handled separately and stored in the skills array
+        }
+      } else if (type === 'file') {
+        // File inputs are handled separately
+      } else if (name) {
         collectedData[name] = element.value;
       }
     });
@@ -330,16 +346,21 @@ export default function JobApplicationForm({ position, onClose, onNotification }
     }
   };
   
-  // Input component with uncontrolled inputs for better typing experience
+  // Input component with uncontrolled inputs for better typing experience - updated to match SurveyForm approach
   const FormInput = ({ label, name, type = 'text', defaultValue = '', placeholder = '', required = false, options = [], onChange }) => {
     const isTouched = touchedInputs[name] || false;
     const error = errors[name];
+    const refKey = `${type}|${name}`;
     
-    // Set ref callback for this input
-    const setInputRef = (element) => {
-      if (element && !element.dataset.refSet) {
-        formRefs.current[name] = element;
-        element.dataset.refSet = true;
+    // Create onChange handler that matches SurveyForm's approach
+    const handleInputChange = () => {
+      if (type === 'checkbox') {
+        const element = formRefs.current[refKey];
+        if (element) {
+          onChange(type, name, element.checked);
+        }
+      } else {
+        onChange(type, name);
       }
     };
     
@@ -357,8 +378,8 @@ export default function JobApplicationForm({ position, onClose, onNotification }
             id={name}
             name={name}
             defaultValue={defaultValue}
-            onChange={onChange}
-            ref={setInputRef}
+            ref={(el) => setInputRef(refKey, el)}
+            onChange={handleInputChange}
             className={`w-full p-3 bg-primary-800/70 border ${error ? 'border-red-500' : 'border-primary-700/50'} rounded-lg text-white focus:outline-none focus:border-primary-500 ${isTouched ? 'bg-primary-800' : ''}`}
           >
             <option value="">Select an option</option>
@@ -374,8 +395,8 @@ export default function JobApplicationForm({ position, onClose, onNotification }
             name={name}
             defaultValue={defaultValue}
             placeholder={placeholder}
-            onChange={onChange}
-            ref={setInputRef}
+            ref={(el) => setInputRef(refKey, el)}
+            onChange={handleInputChange}
             autoComplete="off"
             rows="4"
             className={`w-full p-3 bg-primary-800/70 border ${error ? 'border-red-500' : 'border-primary-700/50'} rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-primary-500 ${isTouched ? 'bg-primary-800' : ''}`}
@@ -394,9 +415,9 @@ export default function JobApplicationForm({ position, onClose, onNotification }
                 type="file"
                 id={name}
                 name={name}
-                ref={setInputRef}
+                ref={(el) => setInputRef(`file|${name}`, el)}
+                onChange={() => onChange('file', name)}
                 accept=".pdf,.doc,.docx"
-                onChange={onChange}
                 className="hidden"
               />
             </label>
@@ -408,8 +429,8 @@ export default function JobApplicationForm({ position, onClose, onNotification }
               id={name}
               name={name}
               defaultChecked={defaultValue}
-              ref={setInputRef}
-              onChange={onChange}
+              ref={(el) => setInputRef(refKey, el)}
+              onChange={handleInputChange}
               className="w-5 h-5 text-primary-600 border-gray-700 rounded bg-primary-900 focus:ring-primary-500"
             />
             <label 
@@ -426,8 +447,8 @@ export default function JobApplicationForm({ position, onClose, onNotification }
             name={name}
             defaultValue={defaultValue}
             placeholder={placeholder}
-            ref={setInputRef}
-            onChange={onChange}
+            ref={(el) => setInputRef(refKey, el)}
+            onChange={handleInputChange}
             autoComplete="off"
             className={`w-full p-3 bg-primary-800/70 border ${error ? 'border-red-500' : 'border-primary-700/50'} rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-primary-500 ${isTouched ? 'bg-primary-800' : ''}`}
           />
@@ -444,6 +465,7 @@ export default function JobApplicationForm({ position, onClose, onNotification }
   const SkillCheckbox = ({ skill, isSelected, onChange }) => {
     const name = `skill-${skill}`;
     const isTouched = touchedInputs[name] || false;
+    const refKey = `checkbox|${name}`;
     
     return (
       <div 
@@ -454,24 +476,24 @@ export default function JobApplicationForm({ position, onClose, onNotification }
           id={name}
           name={name}
           defaultChecked={isSelected}
-          onChange={onChange}
+          ref={(el) => setInputRef(refKey, el)}
+          onChange={() => {
+            const element = formRefs.current[refKey];
+            if (element) {
+              onChange('checkbox', name, element.checked);
+            }
+          }}
           className="w-5 h-5 text-primary-600 border-gray-700 rounded bg-primary-900 focus:ring-primary-500"
         />
         <label 
           htmlFor={name} 
           className="ml-3 block text-sm text-gray-300 flex-1 py-1"
-          onClick={(e) => {
-            // Prevent propagation so parent elements don't get clicked
-            e.stopPropagation();
-            // Create a synthetic event to trigger onChange
-            const syntheticEvent = {
-              target: {
-                name,
-                type: 'checkbox',
-                checked: !isSelected
-              }
-            };
-            onChange(syntheticEvent);
+          onClick={() => {
+            const element = formRefs.current[refKey];
+            if (element) {
+              element.checked = !element.checked;
+              onChange('checkbox', name, element.checked);
+            }
           }}
         >
           {skill}
